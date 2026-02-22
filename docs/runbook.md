@@ -59,3 +59,8 @@ After API is deployed:
 ./infra/cloud-run/bootstrap-scheduler.sh <PROJECT_ID> <REGION> <API_BASE_URL> <INTERNAL_JOB_TOKEN>
 ```
 
+## Sync frequency control
+
+- Default sync interval is `24` hours (once per day).
+- You can update it in Admin: `Sync Schedule` section.
+- Recommended Cloud Scheduler frequency: keep it hourly (or every 30 minutes) and let backend interval gating decide whether to execute or skip.

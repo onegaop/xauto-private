@@ -4,6 +4,7 @@ import { extractJsonObject } from '../../common/utils/json';
 import { ProviderName } from '@xauto/shared-types';
 import { BudgetService } from './budget.service';
 import { ProviderConfigService } from './provider-config.service';
+import { PromptConfigService } from './prompt-config.service';
 
 export type BookmarkInput = {
   tweetId: string;
@@ -36,7 +37,8 @@ export type DigestResult = {
 export class AiService {
   constructor(
     private readonly providerConfigService: ProviderConfigService,
-    private readonly budgetService: BudgetService
+    private readonly budgetService: BudgetService,
+    private readonly promptConfigService: PromptConfigService
   ) {}
 
   async generateMiniSummary(item: BookmarkInput): Promise<SummaryResult> {
@@ -45,15 +47,15 @@ export class AiService {
 
     for (const provider of providers) {
       try {
+        const systemPrompt = await this.promptConfigService.getMiniSummarySystemPrompt();
         const response = await this.callModel(provider.baseUrl, provider.apiKey, provider.miniModel, [
           {
             role: 'system',
-            content:
-              'You are a strict knowledge assistant. Output must be valid JSON with keys: one_liner_zh, one_liner_en, bullets_zh, bullets_en, tags_zh, tags_en, actions, quality_score.'
+            content: systemPrompt
           },
           {
             role: 'user',
-            content: `Tweet:\n${item.text}`
+            content: `Post:\n<<< ${item.text} >>>`
           }
         ]);
 
@@ -98,11 +100,11 @@ export class AiService {
 
     for (const provider of providers) {
       try {
+        const systemPrompt = await this.promptConfigService.getDigestSystemPrompt();
         const response = await this.callModel(provider.baseUrl, provider.apiKey, provider.digestModel, [
           {
             role: 'system',
-            content:
-              'You are a strict digest assistant. Output JSON keys: top_themes, top_items[{tweet_id,reason,next_step}], risks, tomorrow_actions.'
+            content: systemPrompt
           },
           {
             role: 'user',

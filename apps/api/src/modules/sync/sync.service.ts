@@ -73,9 +73,6 @@ export class SyncService {
       );
     }
 
-    const sinceState = await this.syncStateModel.findOne({ key: 'sync:last_tweet_id' });
-    let sinceId = typeof sinceState?.value?.tweetId === 'string' ? sinceState.value.tweetId : undefined;
-
     let page = 0;
     let nextToken: string | undefined;
     let totalFetched = 0;
@@ -83,8 +80,7 @@ export class SyncService {
 
     while (page < 5) {
       const response = await this.xApiService.fetchBookmarks(accessToken, userId, {
-        paginationToken: nextToken,
-        sinceId
+        paginationToken: nextToken
       });
 
       const items = response.items;
@@ -152,22 +148,6 @@ export class SyncService {
         );
       }
 
-      const maxTweetId = items.reduce<string | undefined>((max, item) => {
-        if (!max) {
-          return item.tweetId;
-        }
-
-        try {
-          return BigInt(item.tweetId) > BigInt(max) ? item.tweetId : max;
-        } catch {
-          return item.tweetId > max ? item.tweetId : max;
-        }
-      }, sinceId);
-
-      if (maxTweetId) {
-        sinceId = maxTweetId;
-      }
-
       if (!nextToken) {
         break;
       }
@@ -175,25 +155,9 @@ export class SyncService {
       page += 1;
     }
 
-    if (sinceId) {
-      await this.syncStateModel.updateOne(
-        { key: 'sync:last_tweet_id' },
-        {
-          $set: {
-            value: {
-              tweetId: sinceId,
-              updatedAt: new Date().toISOString()
-            }
-          }
-        },
-        { upsert: true }
-      );
-    }
-
     return {
       totalFetched,
       totalInserted,
-      sinceId,
       pages: page + 1
     };
   }

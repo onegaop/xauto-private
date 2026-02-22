@@ -5,7 +5,11 @@ import { Model } from 'mongoose';
 import { PatToken, PatTokenDocument } from '../../database/schemas/pat-token.schema';
 import { ProviderConfigService } from '../ai/provider-config.service';
 import { UpsertProviderDto } from '../ai/dto/upsert-provider.dto';
+import { UpdatePromptsDto } from '../ai/dto/update-prompts.dto';
+import { PromptConfigService } from '../ai/prompt-config.service';
+import { UpdateSyncSettingsDto } from './dto/update-sync-settings.dto';
 import { JobsService } from '../jobs/jobs.service';
+import { SyncSettingsService } from '../sync/sync-settings.service';
 import { CreatePatDto } from './dto/create-pat.dto';
 import { AdminUser, AdminUserDocument } from '../../database/schemas/admin-user.schema';
 
@@ -17,7 +21,9 @@ export class AdminService {
     @InjectModel(AdminUser.name)
     private readonly adminUserModel: Model<AdminUserDocument>,
     private readonly providerConfigService: ProviderConfigService,
-    private readonly jobsService: JobsService
+    private readonly promptConfigService: PromptConfigService,
+    private readonly jobsService: JobsService,
+    private readonly syncSettingsService: SyncSettingsService
   ) {}
 
   async markAdminLogin(email: string): Promise<void> {
@@ -42,6 +48,22 @@ export class AdminService {
     return this.providerConfigService.upsertProvider(dto);
   }
 
+  async getPrompts(): Promise<Record<string, unknown>> {
+    return this.promptConfigService.listPrompts();
+  }
+
+  async updatePrompts(dto: UpdatePromptsDto): Promise<Record<string, unknown>> {
+    return this.promptConfigService.updatePrompts(dto);
+  }
+
+  async getSyncSettings(): Promise<Record<string, unknown>> {
+    return this.syncSettingsService.getSettings();
+  }
+
+  async updateSyncSettings(dto: UpdateSyncSettingsDto): Promise<Record<string, unknown>> {
+    return this.syncSettingsService.updateSettings(dto.syncIntervalHours);
+  }
+
   async getJobs(limit?: string): Promise<Array<Record<string, unknown>>> {
     const parsed = Number(limit ?? 30);
     const runs = await this.jobsService.listRuns(parsed);
@@ -50,7 +72,7 @@ export class AdminService {
 
   async runJob(name: string): Promise<Record<string, unknown>> {
     if (name === 'sync') {
-      return this.jobsService.triggerSync();
+      return this.jobsService.triggerSync({ force: true, source: 'admin' });
     }
 
     if (name === 'digest_daily') {

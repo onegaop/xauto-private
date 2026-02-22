@@ -6,7 +6,7 @@
   "scripts": {
     "build": "nest build",
     "start": "node dist/apps/api/src/main.js",
-    "start:dev": "nest start --watch",
+    "start:dev": "nest start --watch --entryFile apps/api/src/main",
     "lint": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node -e \"process.stdout.write('No API tests yet\\n')\""

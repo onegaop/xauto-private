@@ -11,6 +11,8 @@
 - `POST /v1/internal/jobs/digest/daily`
 - `POST /v1/internal/jobs/digest/weekly`
 
+`sync` job now supports interval gating (default 24h). If called before next due time, API returns `status: "SKIPPED"` with `nextRunAt`.
+
 Header:
 
 - `Authorization: Bearer <INTERNAL_JOB_TOKEN>`
@@ -30,6 +32,8 @@ Header:
 
 - `GET /v1/admin/providers`
 - `POST /v1/admin/providers`
+- `GET /v1/admin/sync-settings`
+- `POST /v1/admin/sync-settings`
 - `GET /v1/admin/jobs?limit=30`
 - `POST /v1/admin/jobs/:name/run`
 - `POST /v1/admin/pat`
@@ -39,4 +43,3 @@ Headers:
 
 - `x-admin-email: you@example.com`
 - `x-admin-internal-token: <ADMIN_INTERNAL_TOKEN>`
-

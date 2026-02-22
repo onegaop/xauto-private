@@ -3,6 +3,8 @@ import { AdminGuard } from '../../common/guards/admin.guard';
 import { AdminService } from './admin.service';
 import { UpsertProviderDto } from '../ai/dto/upsert-provider.dto';
 import { CreatePatDto } from './dto/create-pat.dto';
+import { UpdatePromptsDto } from '../ai/dto/update-prompts.dto';
+import { UpdateSyncSettingsDto } from './dto/update-sync-settings.dto';
 
 @Controller('/v1/admin')
 @UseGuards(AdminGuard)
@@ -22,6 +24,36 @@ export class AdminController {
   ): Promise<Record<string, unknown>> {
     await this.adminService.markAdminLogin(String(adminEmail || '').toLowerCase());
     return this.adminService.upsertProvider(dto);
+  }
+
+  @Get('/prompts')
+  async getPrompts(@Headers('x-admin-email') adminEmail: string): Promise<Record<string, unknown>> {
+    await this.adminService.markAdminLogin(String(adminEmail || '').toLowerCase());
+    return this.adminService.getPrompts();
+  }
+
+  @Post('/prompts')
+  async updatePrompts(
+    @Headers('x-admin-email') adminEmail: string,
+    @Body() dto: UpdatePromptsDto
+  ): Promise<Record<string, unknown>> {
+    await this.adminService.markAdminLogin(String(adminEmail || '').toLowerCase());
+    return this.adminService.updatePrompts(dto);
+  }
+
+  @Get('/sync-settings')
+  async getSyncSettings(@Headers('x-admin-email') adminEmail: string): Promise<Record<string, unknown>> {
+    await this.adminService.markAdminLogin(String(adminEmail || '').toLowerCase());
+    return this.adminService.getSyncSettings();
+  }
+
+  @Post('/sync-settings')
+  async updateSyncSettings(
+    @Headers('x-admin-email') adminEmail: string,
+    @Body() dto: UpdateSyncSettingsDto
+  ): Promise<Record<string, unknown>> {
+    await this.adminService.markAdminLogin(String(adminEmail || '').toLowerCase());
+    return this.adminService.updateSyncSettings(dto);
   }
 
   @Get('/jobs')

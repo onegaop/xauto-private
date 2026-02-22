@@ -11,14 +11,20 @@ export const callBackend = async (
 
   const url = `${baseUrl.replace(/\/$/, '')}${path}`;
 
+  const headers: Record<string, string> = {
+    'x-admin-email': adminEmail,
+    'x-admin-internal-token': process.env.ADMIN_INTERNAL_TOKEN || ''
+  };
+
+  const requestBody = body ? JSON.stringify(body) : undefined;
+  if (requestBody) {
+    headers['Content-Type'] = 'application/json';
+  }
+
   return fetch(url, {
     method,
-    headers: {
-      'Content-Type': 'application/json',
-      'x-admin-email': adminEmail,
-      'x-admin-internal-token': process.env.ADMIN_INTERNAL_TOKEN || ''
-    },
-    body: body ? JSON.stringify(body) : undefined,
+    headers,
+    body: requestBody,
     cache: 'no-store'
   });
 };

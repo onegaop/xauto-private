@@ -7,6 +7,7 @@ import { JobsController } from './modules/jobs/jobs.controller';
 import { JobsService } from './modules/jobs/jobs.service';
 import { SyncService } from './modules/sync/sync.service';
 import { XApiService } from './modules/sync/x-api.service';
+import { SyncSettingsService } from './modules/sync/sync-settings.service';
 import { DigestService } from './modules/digest/digest.service';
 import { MobileController } from './modules/mobile/mobile.controller';
 import { MobileService } from './modules/mobile/mobile.service';
@@ -15,6 +16,7 @@ import { AdminService } from './modules/admin/admin.service';
 import { AiService } from './modules/ai/ai.service';
 import { BudgetService } from './modules/ai/budget.service';
 import { ProviderConfigService } from './modules/ai/provider-config.service';
+import { PromptConfigService } from './modules/ai/prompt-config.service';
 import { HealthController } from './modules/health/health.controller';
 import { BookmarkItem, BookmarkItemSchema } from './database/schemas/bookmark-item.schema';
 import { ItemSummary, ItemSummarySchema } from './database/schemas/item-summary.schema';
@@ -56,12 +58,14 @@ import { PatGuard } from './common/guards/pat.guard';
     JobsService,
     SyncService,
     XApiService,
+    SyncSettingsService,
     DigestService,
     MobileService,
     AdminService,
     AiService,
     BudgetService,
     ProviderConfigService,
+    PromptConfigService,
     InternalJobGuard,
     AdminGuard,
     PatGuard

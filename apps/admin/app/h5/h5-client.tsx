@@ -144,6 +144,21 @@ const parseApiError = (payload: unknown, status: number): string => {
   return `Request failed (${status})`;
 };
 
+const formatRelativeTime = (dateStr: string): string => {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return '刚刚';
+  if (diffMins < 60) return `${diffMins} 分钟前`;
+  if (diffHours < 24) return `${diffHours} 小时前`;
+  if (diffDays < 7) return `${diffDays} 天前`;
+  return date.toLocaleDateString();
+};
+
 export default function H5Client(): JSX.Element {
   const [patInput, setPatInput] = useState<string>('');
   const [patToken, setPatToken] = useState<string>('');
@@ -156,6 +171,7 @@ export default function H5Client(): JSX.Element {
 
   const [activeTab, setActiveTab] = useState<'today' | 'week'>('today');
   const [selectedItem, setSelectedItem] = useState<ItemData | null>(null);
+  const [digestExpanded, setDigestExpanded] = useState<boolean>(true);
 
   const [loading, setLoading] = useState<boolean>(false);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
@@ -181,7 +197,7 @@ export default function H5Client(): JSX.Element {
     async (token: string): Promise<void> => {
       setLoading(true);
       setError('');
-      setStatusText('Syncing live data...');
+      setStatusText('正在同步...');
 
       try {
         const [todayRaw, weekRaw, itemsRaw] = await Promise.all([
@@ -195,10 +211,10 @@ export default function H5Client(): JSX.Element {
         const itemPayload = toItemsPayload(itemsRaw);
         setItems(itemPayload.items ?? []);
         setNextCursor(itemPayload.nextCursor ?? null);
-        setStatusText('Live data loaded');
+        setStatusText('已同步');
       } catch (fetchError) {
-        setError(fetchError instanceof Error ? fetchError.message : 'Unable to fetch mobile data');
-        setStatusText('Connection failed');
+        setError(fetchError instanceof Error ? fetchError.message : '无法获取数据');
+        setStatusText('同步失败');
       } finally {
         setLoading(false);
       }
@@ -219,7 +235,7 @@ export default function H5Client(): JSX.Element {
       setItems((previous) => [...previous, ...(normalized.items ?? [])]);
       setNextCursor(normalized.nextCursor ?? null);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Failed to load more items');
+      setError(loadError instanceof Error ? loadError.message : '加载更多失败');
     } finally {
       setLoadingMore(false);
     }
@@ -237,7 +253,7 @@ export default function H5Client(): JSX.Element {
       const normalized = toItemsPayload({ items: [payload] }).items?.[0] ?? null;
       setSelectedItem(normalized);
     } catch (detailError) {
-      setError(detailError instanceof Error ? detailError.message : 'Failed to load detail');
+      setError(detailError instanceof Error ? detailError.message : '加载详情失败');
     } finally {
       setLoadingDetail(false);
     }
@@ -265,7 +281,7 @@ export default function H5Client(): JSX.Element {
     setNextCursor(null);
     setSelectedItem(null);
     setError('');
-    setStatusText('Disconnected');
+    setStatusText('已断开');
     window.localStorage.removeItem(PAT_STORAGE_KEY);
   };
 
@@ -283,221 +299,325 @@ export default function H5Client(): JSX.Element {
   const activeDigest = useMemo(() => (activeTab === 'today' ? todayDigest : weekDigest), [activeTab, todayDigest, weekDigest]);
   const generatedAt = activeDigest?.generatedAt ?? activeDigest?.updatedAt ?? activeDigest?.createdAt ?? null;
 
+  const hasDigestContent =
+    (activeDigest?.topThemes?.length ?? 0) > 0 ||
+    (activeDigest?.topItems?.length ?? 0) > 0 ||
+    (activeDigest?.tomorrowActions?.length ?? 0) > 0 ||
+    (activeDigest?.risks?.length ?? 0) > 0;
+
   return (
     <div className={styles.shell}>
-      <div className={styles.glowOne} />
-      <div className={styles.glowTwo} />
-      <main className={styles.container}>
-        <header className={`${styles.hero} ${styles.reveal}`}>
-          <p className={styles.kicker}>XAuto H5 Showcase</p>
-          <h1 className={styles.title}>Bookmark Intelligence Radar</h1>
-          <p className={styles.subtitle}>
-            一页展示今日/本周摘要与重点条目，适合直接在手机浏览器演示。
-          </p>
-          <div className={styles.heroActions}>
-            <a className={styles.ghostButton} href="/">
-              Back to Admin
-            </a>
-            <button
-              className={styles.primaryButton}
-              type="button"
-              onClick={() => void (patToken ? refreshAll(patToken) : Promise.resolve())}
-              disabled={!patToken || loading}
-            >
-              {loading ? 'Refreshing...' : 'Refresh Live Data'}
-            </button>
-          </div>
-        </header>
-
-        <section className={`${styles.card} ${styles.revealDelayOne}`}>
-          <div className={styles.sectionHeader}>
-            <h2>Connect With PAT</h2>
-            <span className={styles.status}>{statusText}</span>
-          </div>
-          <form className={styles.tokenForm} onSubmit={connectPat}>
-            <label htmlFor="pat-input">PAT Token</label>
-            <div className={styles.tokenRow}>
-              <input
-                id="pat-input"
-                type={showToken ? 'text' : 'password'}
-                value={patInput}
-                onChange={(event) => setPatInput(event.target.value)}
-                placeholder="Paste your PAT token"
-                autoComplete="off"
-              />
+      {/* 顶部导航 */}
+      <header className={styles.topBar}>
+        <a href="/" className={styles.brand}>
+          <span className={styles.brandIcon}>📡</span>
+          <span>Bookmark Radar</span>
+        </a>
+        <div className={styles.topActions}>
+          {patToken ? (
+            <>
+              <span className={`${styles.statusDot} ${loading ? styles.statusDotLoading : styles.statusDotActive}`} title={statusText} />
               <button
                 type="button"
-                className={styles.ghostButton}
-                onClick={() => setShowToken((value) => !value)}
+                className={styles.iconBtn}
+                onClick={() => void refreshAll(patToken)}
+                disabled={loading}
+                title="刷新"
+                aria-label="刷新"
               >
-                {showToken ? 'Hide' : 'Show'}
+                {loading ? (
+                  <span className={styles.spinner} />
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                    <path d="M3 3v5h5" />
+                    <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                    <path d="M16 21h5v-5" />
+                  </svg>
+                )}
               </button>
-            </div>
-            <div className={styles.tokenActions}>
-              <button className={styles.primaryButton} type="submit">
-                Connect
+              <button type="button" className={styles.textBtn} onClick={disconnectPat}>
+                断开
               </button>
-              <button className={styles.ghostButton} type="button" onClick={disconnectPat}>
-                Disconnect
-              </button>
-            </div>
-          </form>
-          {error ? <p className={styles.error}>{error}</p> : null}
-        </section>
+            </>
+          ) : (
+            <a href="/" className={styles.textBtn}>
+              返回管理后台
+            </a>
+          )}
+        </div>
+      </header>
 
-        <section className={`${styles.grid} ${styles.revealDelayTwo}`}>
-          <article className={styles.card}>
-            <div className={styles.sectionHeader}>
-              <h2>Digest</h2>
-              <div className={styles.tabs}>
-                <button
-                  type="button"
-                  className={activeTab === 'today' ? styles.tabActive : styles.tab}
-                  onClick={() => setActiveTab('today')}
-                >
-                  Today
-                </button>
-                <button
-                  type="button"
-                  className={activeTab === 'week' ? styles.tabActive : styles.tab}
-                  onClick={() => setActiveTab('week')}
-                >
-                  Week
-                </button>
-              </div>
-            </div>
-
-            {activeDigest ? (
-              <div className={styles.digestBody}>
-                <div className={styles.metaRow}>
-                  <span>{activeDigest.periodKey ? `Key: ${activeDigest.periodKey}` : 'No period key'}</span>
-                  <span>{generatedAt ? new Date(generatedAt).toLocaleString() : 'No timestamp'}</span>
-                </div>
-                <div className={styles.chips}>
-                  {(activeDigest.topThemes ?? []).map((theme) => (
-                    <span key={theme} className={styles.chip}>
-                      {theme}
-                    </span>
-                  ))}
-                </div>
-
-                <h3>Top Items</h3>
-                <ul className={styles.list}>
-                  {(activeDigest.topItems ?? []).map((item) => (
-                    <li key={`${item.tweetId}-${item.reason.slice(0, 8)}`}>
-                      <strong>#{item.tweetId}</strong> {item.reason}
-                    </li>
-                  ))}
-                </ul>
-
-                <h3>Tomorrow Actions</h3>
-                <ul className={styles.list}>
-                  {(activeDigest.tomorrowActions ?? []).map((action) => (
-                    <li key={action}>{action}</li>
-                  ))}
-                </ul>
-
-                <h3>Risks</h3>
-                <ul className={styles.list}>
-                  {(activeDigest.risks ?? []).map((risk) => (
-                    <li key={risk}>{risk}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : (
-              <p className={styles.empty}>No digest yet. Connect PAT and refresh to load live data.</p>
-            )}
-          </article>
-
-          <article className={styles.card}>
-            <div className={styles.sectionHeader}>
-              <h2>Latest Items</h2>
-              <span className={styles.status}>{items.length} loaded</span>
-            </div>
-            {items.length === 0 ? (
-              <p className={styles.empty}>No item data yet.</p>
-            ) : (
-              <div className={styles.itemFeed}>
-                {items.map((item, index) => (
+      <main className={styles.main}>
+        {!patToken ? (
+          /* 未连接：居中欢迎卡片 */
+          <section className={styles.welcomeSection}>
+            <div className={styles.welcomeCard}>
+              <div className={styles.welcomeIcon}>🔐</div>
+              <h1 className={styles.welcomeTitle}>连接你的书签</h1>
+              <p className={styles.welcomeDesc}>
+                粘贴 PAT token 以同步书签摘要与最新条目，适合在手机浏览器中快速查看。
+              </p>
+              <form className={styles.connectForm} onSubmit={connectPat}>
+                <div className={styles.inputGroup}>
+                  <input
+                    id="pat-input"
+                    type={showToken ? 'text' : 'password'}
+                    value={patInput}
+                    onChange={(e) => setPatInput(e.target.value)}
+                    placeholder="粘贴 PAT token"
+                    autoComplete="off"
+                    className={styles.input}
+                  />
                   <button
                     type="button"
-                    key={`${item.tweetId}-${index}`}
-                    className={styles.itemCard}
-                    onClick={() => void openItemDetail(item.tweetId)}
+                    className={styles.inputSuffix}
+                    onClick={() => setShowToken((v) => !v)}
+                    aria-label={showToken ? '隐藏' : '显示'}
                   >
-                    <div className={styles.itemMeta}>
-                      <span>{item.authorName || 'Unknown author'}</span>
-                      <span>{item.createdAtX ? new Date(item.createdAtX).toLocaleString() : 'No date'}</span>
-                    </div>
-                    <h3>{item.summary?.oneLinerZh || 'No summary yet'}</h3>
-                    <p>{(item.text || '').slice(0, 160)}</p>
-                    <div className={styles.chips}>
-                      {(item.summary?.tagsZh ?? []).slice(0, 4).map((tag) => (
-                        <span className={styles.chipSoft} key={`${item.tweetId}-${tag}`}>
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
+                    {showToken ? '隐藏' : '显示'}
                   </button>
-                ))}
-              </div>
-            )}
-            <div className={styles.loadMoreWrap}>
-              <button
-                type="button"
-                className={styles.primaryButton}
-                disabled={!nextCursor || loadingMore}
-                onClick={() => void loadMore()}
-              >
-                {loadingMore ? 'Loading...' : nextCursor ? 'Load More' : 'All Loaded'}
-              </button>
+                </div>
+                <button type="submit" className={styles.primaryBtn}>
+                  连接
+                </button>
+              </form>
+              {error ? <p className={styles.error}>{error}</p> : null}
             </div>
-          </article>
-        </section>
+          </section>
+        ) : (
+          /* 已连接：内容区 */
+          <>
+            {error ? <p className={styles.errorBanner}>{error}</p> : null}
+
+            {/* 摘要卡片 */}
+            <section className={styles.section}>
+              <div className={styles.sectionHeader}>
+                <h2>摘要</h2>
+                <div className={styles.segmented}>
+                  <button
+                    type="button"
+                    className={activeTab === 'today' ? styles.segmentedActive : styles.segmentedBtn}
+                    onClick={() => setActiveTab('today')}
+                  >
+                    今日
+                  </button>
+                  <button
+                    type="button"
+                    className={activeTab === 'week' ? styles.segmentedActive : styles.segmentedBtn}
+                    onClick={() => setActiveTab('week')}
+                  >
+                    本周
+                  </button>
+                </div>
+              </div>
+
+              {activeDigest ? (
+                <div className={styles.digestCard}>
+                  {hasDigestContent && (
+                    <>
+                      <div className={styles.digestMeta}>
+                        {generatedAt && (
+                          <span className={styles.digestTime}>{formatRelativeTime(generatedAt)}</span>
+                        )}
+                      </div>
+                      {(activeDigest.topThemes ?? []).length > 0 && (
+                        <div className={styles.themeChips}>
+                          {(activeDigest.topThemes ?? []).map((theme) => (
+                            <span key={theme} className={styles.themeChip}>
+                              {theme}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        className={styles.expandBtn}
+                        onClick={() => setDigestExpanded((e) => !e)}
+                        aria-expanded={digestExpanded}
+                      >
+                        {digestExpanded ? '收起详情' : '展开详情'}
+                        <span className={`${styles.expandIcon} ${digestExpanded ? styles.expandIconActive : ''}`}>▼</span>
+                      </button>
+                    </>
+                  )}
+                  {!hasDigestContent && (
+                    <p className={styles.digestEmpty}>暂无摘要内容</p>
+                  )}
+                  {hasDigestContent && digestExpanded && (
+                    <div className={styles.digestBody}>
+                      {(activeDigest.topItems ?? []).length > 0 && (
+                        <>
+                          <h4>重点条目</h4>
+                          <ul>
+                            {(activeDigest.topItems ?? []).map((item) => (
+                              <li key={item.tweetId}>
+                                <strong>#{item.tweetId}</strong> {item.reason}
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                      {(activeDigest.tomorrowActions ?? []).length > 0 && (
+                        <>
+                          <h4>明日行动</h4>
+                          <ul>
+                            {(activeDigest.tomorrowActions ?? []).map((action) => (
+                              <li key={action}>{action}</li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                      {(activeDigest.risks ?? []).length > 0 && (
+                        <>
+                          <h4>风险</h4>
+                          <ul>
+                            {(activeDigest.risks ?? []).map((risk) => (
+                              <li key={risk}>{risk}</li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className={styles.emptyCard}>
+                  <p>暂无摘要，点击顶部刷新按钮同步数据</p>
+                </div>
+              )}
+            </section>
+
+            {/* 最新条目 */}
+            <section className={styles.section}>
+              <div className={styles.sectionHeader}>
+                <h2>最新条目</h2>
+                {items.length > 0 && <span className={styles.count}>{items.length} 条</span>}
+              </div>
+
+              {items.length === 0 ? (
+                <div className={styles.emptyCard}>
+                  <p>暂无条目，点击顶部刷新按钮同步数据</p>
+                </div>
+              ) : (
+                <div className={styles.feed}>
+                  {items.map((item, index) => (
+                    <button
+                      type="button"
+                      key={`${item.tweetId}-${index}`}
+                      className={styles.feedItem}
+                      onClick={() => void openItemDetail(item.tweetId)}
+                    >
+                      <div className={styles.feedItemMeta}>
+                        <span className={styles.feedAuthor}>{item.authorName || '未知'}</span>
+                        <span className={styles.feedTime}>
+                          {item.createdAtX ? formatRelativeTime(item.createdAtX) : ''}
+                        </span>
+                      </div>
+                      <h3 className={styles.feedItemTitle}>
+                        {item.summary?.oneLinerZh || '暂无摘要'}
+                      </h3>
+                      <p className={styles.feedItemExcerpt}>{(item.text || '').slice(0, 120)}</p>
+                      {(item.summary?.tagsZh ?? []).length > 0 && (
+                        <div className={styles.feedTags}>
+                          {(item.summary?.tagsZh ?? []).slice(0, 4).map((tag) => (
+                            <span key={tag} className={styles.feedTag}>
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {nextCursor && (
+                <div className={styles.loadMoreWrap}>
+                  <button
+                    type="button"
+                    className={styles.loadMoreBtn}
+                    disabled={loadingMore}
+                    onClick={() => void loadMore()}
+                  >
+                    {loadingMore ? (
+                      <>
+                        <span className={styles.spinner} />
+                        加载中...
+                      </>
+                    ) : (
+                      '加载更多'
+                    )}
+                  </button>
+                </div>
+              )}
+            </section>
+          </>
+        )}
       </main>
 
-      {(selectedItem || loadingDetail) ? (
-        <aside className={styles.drawer}>
-          <div className={styles.drawerHeader}>
-            <h2>Item Detail</h2>
-            <button type="button" className={styles.ghostButton} onClick={() => setSelectedItem(null)}>
-              Close
-            </button>
-          </div>
-
-          {loadingDetail && !selectedItem ? <p className={styles.empty}>Loading...</p> : null}
-
-          {selectedItem ? (
-            <div className={styles.drawerBody}>
-              <p className={styles.drawerMeta}>Tweet ID: {selectedItem.tweetId}</p>
-              <p>{selectedItem.text}</p>
-
-              <h3>Summary (ZH)</h3>
-              <p>{selectedItem.summary?.oneLinerZh || 'No one-liner'}</p>
-              <ul className={styles.list}>
-                {(selectedItem.summary?.bulletsZh ?? []).map((bullet) => (
-                  <li key={bullet}>{bullet}</li>
-                ))}
-              </ul>
-
-              <h3>Actions</h3>
-              <ul className={styles.list}>
-                {(selectedItem.summary?.actions ?? []).map((action) => (
-                  <li key={action}>{action}</li>
-                ))}
-              </ul>
-
-              {selectedItem.url ? (
-                <p>
-                  <a className={styles.link} href={selectedItem.url} target="_blank" rel="noreferrer">
-                    Open Source Link
-                  </a>
-                </p>
-              ) : null}
+      {/* 详情抽屉 */}
+      {(selectedItem || loadingDetail) && (
+        <div className={styles.drawerOverlay} onClick={() => setSelectedItem(null)} aria-hidden="true">
+          <aside
+            className={styles.drawer}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-label="条目详情"
+          >
+            <div className={styles.drawerHeader}>
+              <h2>详情</h2>
+              <button
+                type="button"
+                className={styles.closeBtn}
+                onClick={() => setSelectedItem(null)}
+                aria-label="关闭"
+              >
+                ✕
+              </button>
             </div>
-          ) : null}
-        </aside>
-      ) : null}
+
+            {loadingDetail && !selectedItem ? (
+              <div className={styles.drawerLoading}>
+                <span className={styles.spinner} />
+                <p>加载中...</p>
+              </div>
+            ) : selectedItem ? (
+              <div className={styles.drawerBody}>
+                <div className={styles.drawerMeta}>Tweet #{selectedItem.tweetId}</div>
+                <p className={styles.drawerText}>{selectedItem.text}</p>
+
+                <h4>摘要</h4>
+                <p>{selectedItem.summary?.oneLinerZh || '暂无'}</p>
+                {(selectedItem.summary?.bulletsZh ?? []).length > 0 && (
+                  <ul>
+                    {(selectedItem.summary?.bulletsZh ?? []).map((bullet) => (
+                      <li key={bullet}>{bullet}</li>
+                    ))}
+                  </ul>
+                )}
+
+                {(selectedItem.summary?.actions ?? []).length > 0 && (
+                  <>
+                    <h4>行动建议</h4>
+                    <ul>
+                      {(selectedItem.summary?.actions ?? []).map((action) => (
+                        <li key={action}>{action}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+
+                {selectedItem.url && (
+                  <a className={styles.sourceLink} href={selectedItem.url} target="_blank" rel="noreferrer">
+                    查看原文 →
+                  </a>
+                )}
+              </div>
+            ) : null}
+          </aside>
+        </div>
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { JobRun, JobRunDocument } from '../../database/schemas/job-run.schema';
 import { DigestService } from '../digest/digest.service';
 import { SyncService } from '../sync/sync.service';
+import { SyncSettingsService } from '../sync/sync-settings.service';
 
 @Injectable()
 export class JobsService {
@@ -11,11 +12,39 @@ export class JobsService {
     @InjectModel(JobRun.name)
     private readonly jobRunModel: Model<JobRunDocument>,
     private readonly syncService: SyncService,
-    private readonly digestService: DigestService
+    private readonly digestService: DigestService,
+    private readonly syncSettingsService: SyncSettingsService
   ) {}
 
-  async triggerSync(): Promise<Record<string, unknown>> {
-    return this.executeJob('sync', async () => this.syncService.runIncrementalSync());
+  async triggerSync(options?: { force?: boolean; source?: 'internal' | 'admin' }): Promise<Record<string, unknown>> {
+    const force = options?.force === true;
+    const source = options?.source ?? (force ? 'admin' : 'internal');
+
+    if (!force) {
+      const decision = await this.syncSettingsService.shouldRunNow();
+      if (!decision.shouldRun) {
+        return {
+          jobName: 'sync',
+          status: 'SKIPPED',
+          source,
+          reason: decision.reason,
+          syncIntervalHours: decision.settings.syncIntervalHours,
+          lastRunAt: decision.settings.lastRunAt,
+          nextRunAt: decision.settings.nextRunAt
+        };
+      }
+    }
+
+    return this.executeJob('sync', async () => {
+      const result = await this.syncService.runIncrementalSync();
+      await this.syncSettingsService.markSyncRun(new Date());
+
+      return {
+        ...result,
+        source,
+        forced: force
+      };
+    });
   }
 
   async triggerDailyDigest(): Promise<Record<string, unknown>> {

@@ -9,7 +9,7 @@ export class JobsController {
 
   @Post('/sync')
   async runSync(): Promise<Record<string, unknown>> {
-    return this.jobsService.triggerSync();
+    return this.jobsService.triggerSync({ force: false, source: 'internal' });
   }
 
   @Post('/digest/daily')

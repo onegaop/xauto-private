@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { callBackend } from '@/lib/backend';
 import { requireAdminSession } from '@/lib/require-admin-session';
+import { adminProxyError } from '@/lib/admin-proxy-error';
 
 export async function DELETE(
   _request: NextRequest,
@@ -12,6 +13,6 @@ export async function DELETE(
     const payload = await response.json();
     return NextResponse.json(payload, { status: response.status });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Unauthorized' }, { status: 401 });
+    return adminProxyError(error);
   }
 }

@@ -29,7 +29,7 @@ export class XApiService {
   async fetchBookmarks(
     accessToken: string,
     userId: string,
-    options: { paginationToken?: string; maxResults?: number; sinceId?: string }
+    options: { paginationToken?: string; maxResults?: number }
   ): Promise<{ items: XBookmarkItem[]; nextToken?: string }> {
     const env = getEnv();
 
@@ -42,10 +42,6 @@ export class XApiService {
 
     if (options.paginationToken) {
       params.pagination_token = options.paginationToken;
-    }
-
-    if (options.sinceId) {
-      params.since_id = options.sinceId;
     }
 
     const response = await this.requestWithRetry(async () =>
@@ -103,8 +99,61 @@ export class XApiService {
           continue;
         }
 
-        throw new ServiceUnavailableException('Failed to fetch bookmarks from X API');
+        const details = this.readErrorDetails(axiosError);
+        const statusPart = status ? `status=${status}` : 'status=unknown';
+        const detailPart = details ? ` detail=${details}` : '';
+        throw new ServiceUnavailableException(`Failed to fetch bookmarks from X API (${statusPart}${detailPart})`);
       }
     }
+  }
+
+  private readErrorDetails(error: AxiosError): string {
+    const data = error.response?.data;
+
+    if (!data) {
+      return error.message;
+    }
+
+    if (typeof data === 'string') {
+      return data.slice(0, 240);
+    }
+
+    if (typeof data !== 'object') {
+      return String(data).slice(0, 240);
+    }
+
+    const payload = data as Record<string, unknown>;
+    const candidates: string[] = [];
+
+    if (typeof payload.error === 'string') {
+      candidates.push(payload.error);
+    }
+
+    if (typeof payload.title === 'string') {
+      candidates.push(payload.title);
+    }
+
+    if (typeof payload.detail === 'string') {
+      candidates.push(payload.detail);
+    }
+
+    if (Array.isArray(payload.errors)) {
+      for (const item of payload.errors) {
+        if (item && typeof item === 'object' && typeof (item as Record<string, unknown>).message === 'string') {
+          candidates.push(String((item as Record<string, unknown>).message));
+        }
+      }
+    }
+
+    const compact = candidates
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .join(' | ');
+
+    if (compact) {
+      return compact.slice(0, 240);
+    }
+
+    return JSON.stringify(payload).slice(0, 240);
   }
 }

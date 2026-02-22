@@ -50,3 +50,4 @@ npm run dev:admin
 - API contract: `docs/api-contract.md`
 - GitHub private setup: `docs/github-private-setup.md`
 - Runbook: `docs/runbook.md`
+- Updated plan: `docs/implementation-plan-v2.md`
