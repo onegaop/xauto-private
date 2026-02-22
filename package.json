@@ -1,0 +1,23 @@
+{
+  "name": "xauto",
+  "private": true,
+  "version": "0.1.0",
+  "description": "XAuto monorepo: API, Admin, shared types, and iOS skeleton",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "check:console-log": "bash ./scripts/check-no-console-log.sh",
+    "dev:api": "npm run start:dev --workspace @xauto/api",
+    "dev:admin": "npm run dev --workspace @xauto/admin"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

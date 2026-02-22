@@ -1,0 +1,100 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-api:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure docker auth
+        run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push API image
+        run: |
+          IMAGE="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GAR_REPOSITORY }}/xauto-api:${{ github.sha }}"
+          docker build -f apps/api/Dockerfile -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      - name: Deploy API to Cloud Run
+        run: |
+          gcloud run deploy "${{ vars.CLOUD_RUN_API_SERVICE }}" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ vars.GCP_REGION }}" \
+            --platform managed \
+            --allow-unauthenticated \
+            --min-instances=0 \
+            --image "$IMAGE" \
+            --update-secrets MONGODB_URI=MONGODB_URI:latest,ENCRYPTION_MASTER_KEY=ENCRYPTION_MASTER_KEY:latest,X_CLIENT_SECRET=X_CLIENT_SECRET:latest,DEEPSEEK_API_KEY=DEEPSEEK_API_KEY:latest,DASHSCOPE_API_KEY=DASHSCOPE_API_KEY:latest \
+            --set-env-vars APP_BASE_URL=${{ vars.API_BASE_URL }},PORT=8080,TIMEZONE=Asia/Shanghai,ADMIN_ALLOWED_EMAILS=${{ vars.ADMIN_ALLOWED_EMAILS }},X_CLIENT_ID=${{ vars.X_CLIENT_ID }},X_REDIRECT_URI=${{ vars.X_REDIRECT_URI }},X_OAUTH_AUTHORIZE_URL=https://twitter.com/i/oauth2/authorize,X_OAUTH_TOKEN_URL=https://api.x.com/2/oauth2/token,X_API_BASE_URL=https://api.x.com/2,BUDGET_CNY_MONTHLY=100
+
+  deploy-admin:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    needs: deploy-api
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure docker auth
+        run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push Admin image
+        run: |
+          IMAGE="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GAR_REPOSITORY }}/xauto-admin:${{ github.sha }}"
+          docker build -f apps/admin/Dockerfile -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      - name: Deploy Admin to Cloud Run
+        run: |
+          gcloud run deploy "${{ vars.CLOUD_RUN_ADMIN_SERVICE }}" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ vars.GCP_REGION }}" \
+            --platform managed \
+            --allow-unauthenticated \
+            --min-instances=0 \
+            --image "$IMAGE" \
+            --update-secrets NEXTAUTH_SECRET=NEXTAUTH_SECRET:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,ADMIN_INTERNAL_TOKEN=ADMIN_INTERNAL_TOKEN:latest \
+            --set-env-vars NEXTAUTH_URL=${{ vars.ADMIN_BASE_URL }},GOOGLE_ALLOWED_EMAIL=${{ vars.GOOGLE_ALLOWED_EMAIL }},API_BASE_URL=${{ vars.API_BASE_URL }}
