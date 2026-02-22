@@ -1,30 +1,36 @@
-# XAuto iOS Skeleton
+# XAuto iOS App
 
-This folder contains SwiftUI + WidgetKit source skeleton for V1.
+SwiftUI + WidgetKit iOS client for XAuto V1.
 
-## Suggested Xcode targets
+## Includes
 
-1. `XAutoApp` (iOS app, SwiftUI)
-2. `XAutoWidget` (Widget extension)
+1. Today digest view (themes, top items, synced bookmarks)
+2. Week digest view (themes, risks, action list)
+3. Item detail view (summary + open original X post)
+4. Settings (API base URL + PAT pairing + connection test)
+5. Home widget (Small / Medium) with App Group cache fallback
 
-If you use XcodeGen:
+## Project Generation
 
 ```bash
-cd apps/ios
+cd /Users/eagleone/Documents/projects/XAuto/apps/ios
 xcodegen
+open XAuto.xcodeproj
 ```
 
-Project spec is in `project.yml`.
+## Required Xcode Setup
 
-## Required runtime setup
+1. Set your Apple Team in both targets:
+   - `XAutoApp`
+   - `XAutoWidget`
+2. Enable App Group `group.com.xauto.shared` for both targets.
+3. Build and run on iOS 17+ device/simulator.
 
-- Add App Group: `group.com.xauto.shared`
-- Store PAT token in Keychain after first pairing
-- API base URL and PAT can be injected through app settings in debug builds
+## First Run
 
-## Screens
-
-- Today digest
-- Week digest
-- Item detail
-- Settings (PAT pairing)
+1. Open **Settings** tab in app.
+2. Fill:
+   - `API Base URL` (default points to Cloud Run prod)
+   - `PAT` from Admin dashboard
+3. Tap **Save & Test**.
+4. Pull to refresh in Today/Week.

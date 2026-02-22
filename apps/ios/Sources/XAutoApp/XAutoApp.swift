@@ -2,9 +2,27 @@ import SwiftUI
 
 @main
 struct XAutoApp: App {
+    @StateObject private var navigation = AppNavigationState()
+
+    init() {
+        let defaults = SharedDefaults.userDefaults
+        if defaults.string(forKey: XAutoSharedKeys.apiBase) == nil {
+            defaults.set(XAutoSharedKeys.defaultAPIBase, forKey: XAutoSharedKeys.apiBase)
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(selectedTab: $navigation.selectedTab)
+                .onOpenURL { url in
+                    if url.host == "today" {
+                        navigation.selectedTab = .today
+                    } else if url.host == "week" {
+                        navigation.selectedTab = .week
+                    } else if url.host == "settings" {
+                        navigation.selectedTab = .settings
+                    }
+                }
         }
     }
 }
