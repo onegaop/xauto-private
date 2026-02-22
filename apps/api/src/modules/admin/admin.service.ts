@@ -45,7 +45,7 @@ export class AdminService {
   async getJobs(limit?: string): Promise<Array<Record<string, unknown>>> {
     const parsed = Number(limit ?? 30);
     const runs = await this.jobsService.listRuns(parsed);
-    return runs.map((run) => run.toObject());
+    return runs.map((run) => run.toObject() as unknown as Record<string, unknown>);
   }
 
   async runJob(name: string): Promise<Record<string, unknown>> {
