@@ -22,4 +22,4 @@ COPY --from=builder /app/node_modules /app/node_modules
 COPY --from=builder /app/packages/shared-types/dist /app/packages/shared-types/dist
 COPY --from=builder /app/apps/api/dist /app/apps/api/dist
 
-CMD ["node", "apps/api/dist/main.js"]
+CMD ["node", "apps/api/dist/apps/api/src/main.js"]
