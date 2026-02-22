@@ -30,7 +30,9 @@ import { PatGuard } from './common/guards/pat.guard';
 
 @Module({
   imports: [
-    MongooseModule.forRoot(getEnv().MONGODB_URI),
+    MongooseModule.forRoot(getEnv().MONGODB_URI, {
+      lazyConnection: true
+    }),
     MongooseModule.forFeature([
       { name: BookmarkItem.name, schema: BookmarkItemSchema },
       { name: ItemSummary.name, schema: ItemSummarySchema },
