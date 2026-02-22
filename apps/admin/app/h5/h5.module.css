@@ -297,7 +297,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 
 .sectionHeader h2 {
@@ -349,6 +350,7 @@
   background: var(--bg-card);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
+  border: 1px solid var(--border);
 }
 
 .digestMeta {
@@ -724,6 +726,300 @@
   opacity: 0.8;
 }
 
+/* 统计洞察 */
+.insightCard {
+  padding: 20px;
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+}
+
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metricCell {
+  padding: 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.metricLabel {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.metricValue {
+  margin-top: 6px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.insightBlocks {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 20px;
+}
+
+.insightBlock h4 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.keywordChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.keywordChip {
+  padding: 5px 10px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--accent);
+  background: var(--accent-muted);
+  border-radius: var(--radius-full);
+}
+
+.claimRows {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 10px;
+}
+
+.claimRow {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: 10px;
+}
+
+.claimRowLabel {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.claimRowBar {
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--border);
+  overflow: hidden;
+}
+
+.claimRowFill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+}
+
+.claimRowCount {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+/* 历史摘要 */
+.historyList {
+  display: grid;
+  gap: 12px;
+}
+
+.historyCard {
+  padding: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.historyHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.historyHeader strong {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.historyHeader span {
+  font-size: 0.82rem;
+  color: var(--text-tertiary);
+}
+
+.historyThemes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.historyItems {
+  margin: 12px 0 0;
+  padding-left: 20px;
+}
+
+.historyItems li {
+  margin-bottom: 6px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.historyEmpty {
+  margin: 12px 0 0;
+  font-size: 0.9rem;
+  color: var(--text-tertiary);
+}
+
+/* 条目筛选 */
+.filterBar {
+  margin-bottom: 16px;
+  padding: 16px;
+  background: var(--bg);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.filterRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filterLabel {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.filterChips,
+.filterChipsScroll {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filterChipsScroll {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.filterChipsScroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.filterChipsScroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.filterChip,
+.filterChipActive {
+  padding: 8px 14px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: var(--radius-full);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  white-space: nowrap;
+}
+
+.filterChip {
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+}
+
+.filterChip:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-muted);
+}
+
+.filterChipActive {
+  color: #fff;
+  background: var(--accent);
+}
+
+.filterChipActive:hover {
+  background: var(--accent-hover);
+}
+
+.filterReset {
+  margin-top: 4px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.2s var(--ease);
+  align-self: flex-start;
+}
+
+.filterReset:hover {
+  color: var(--accent);
+  background: var(--accent-muted);
+}
+
+.feedFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.qualityPill {
+  white-space: nowrap;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--accent);
+  background: var(--accent-muted);
+  border-radius: var(--radius-full);
+}
+
+/* 详情补充 */
+.claimTypeList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.claimTypePill {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--accent);
+  background: var(--accent-muted);
+  border-radius: var(--radius-full);
+}
+
 /* 响应式 */
 @media (max-width: 480px) {
   .topBar {
@@ -737,6 +1033,15 @@
 
   .welcomeCard {
     padding: 32px 24px;
+  }
+
+  .metricGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .claimRow {
+    grid-template-columns: 48px minmax(0, 1fr) 28px;
+    gap: 8px;
   }
 
   .drawer {

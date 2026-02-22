@@ -17,12 +17,29 @@ export class MobileController {
     return this.mobileService.getWeekDigest();
   }
 
-  @Get('/items')
-  async listItems(
+  @Get('/digest/history')
+  async getDigestHistory(
+    @Query('period') period?: string,
     @Query('limit') limit?: string,
     @Query('cursor') cursor?: string
   ): Promise<Record<string, unknown>> {
-    return this.mobileService.listItems(limit, cursor);
+    return this.mobileService.getDigestHistory(period, limit, cursor);
+  }
+
+  @Get('/summary/stats')
+  async getSummaryStats(@Query('range') range?: string): Promise<Record<string, unknown>> {
+    return this.mobileService.getSummaryStats(range);
+  }
+
+  @Get('/items')
+  async listItems(
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
+    @Query('tag') tag?: string,
+    @Query('claimLabel') claimLabel?: string,
+    @Query('qualityMin') qualityMin?: string
+  ): Promise<Record<string, unknown>> {
+    return this.mobileService.listItems(limit, cursor, tag, claimLabel, qualityMin);
   }
 
   @Get('/items/:tweetId')

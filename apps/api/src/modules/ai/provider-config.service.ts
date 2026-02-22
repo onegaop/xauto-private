@@ -5,6 +5,7 @@ import { getEnv } from '../../config/env';
 import { ProviderConfig, ProviderConfigDocument } from '../../database/schemas/provider-config.schema';
 import { decryptText, encryptText } from '../../common/utils/crypto';
 import { UpsertProviderDto } from './dto/upsert-provider.dto';
+import { ProviderName } from '@xauto/shared-types';
 
 @Injectable()
 export class ProviderConfigService {
@@ -64,7 +65,7 @@ export class ProviderConfigService {
   }
 
   async getActiveProviderCredentials(): Promise<Array<{
-    provider: 'deepseek' | 'qwen';
+    provider: ProviderName;
     baseUrl: string;
     miniModel: string;
     digestModel: string;

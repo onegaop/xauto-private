@@ -17,6 +17,7 @@ secrets.local.json
 
 # OS
 .DS_Store
+.idea/
 
 # Swift / Xcode
 DerivedData/

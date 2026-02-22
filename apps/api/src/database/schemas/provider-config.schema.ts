@@ -5,8 +5,8 @@ export type ProviderConfigDocument = HydratedDocument<ProviderConfig>;
 
 @Schema({ collection: 'provider_configs', timestamps: true })
 export class ProviderConfig {
-  @Prop({ required: true, enum: ['deepseek', 'qwen'], unique: true, index: true })
-  provider!: 'deepseek' | 'qwen';
+  @Prop({ required: true, enum: ['deepseek', 'qwen', 'gemini'], unique: true, index: true })
+  provider!: 'deepseek' | 'qwen' | 'gemini';
 
   @Prop({ required: true })
   baseUrl!: string;

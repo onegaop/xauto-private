@@ -32,6 +32,37 @@ export class ItemSummary {
   @Prop({ type: [String], default: [] })
   actions!: string[];
 
+  @Prop({ default: '' })
+  coreViewpoint!: string;
+
+  @Prop({ default: '' })
+  underlyingProblem!: string;
+
+  @Prop({
+    type: [
+      {
+        concept: { type: String, required: true },
+        solves: { type: String, required: true }
+      }
+    ],
+    default: []
+  })
+  keyTechnologies!: Array<{ concept: string; solves: string }>;
+
+  @Prop({
+    type: [
+      {
+        statement: { type: String, required: true },
+        label: { type: String, enum: ['fact', 'opinion', 'speculation'], required: true }
+      }
+    ],
+    default: []
+  })
+  claimTypes!: Array<{ statement: string; label: 'fact' | 'opinion' | 'speculation' }>;
+
+  @Prop({ type: [String], default: [] })
+  researchKeywordsEn!: string[];
+
   @Prop({ required: true })
   qualityScore!: number;
 

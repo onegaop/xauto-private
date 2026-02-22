@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react';
 import { signOut } from 'next-auth/react';
 import styles from './dashboard.module.css';
 
+type ProviderName = 'deepseek' | 'qwen' | 'gemini';
+
 type ProviderConfig = {
   id: string;
-  provider: 'deepseek' | 'qwen';
+  provider: ProviderName;
   baseUrl: string;
   miniModel: string;
   digestModel: string;
@@ -37,6 +39,31 @@ type SyncSettings = {
   nextRunAt: string | null;
 };
 
+const PROVIDER_PRESET: Record<
+  ProviderName,
+  {
+    baseUrl: string;
+    miniModel: string;
+    digestModel: string;
+  }
+> = {
+  deepseek: {
+    baseUrl: 'https://api.deepseek.com',
+    miniModel: 'deepseek-chat',
+    digestModel: 'deepseek-reasoner'
+  },
+  qwen: {
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    miniModel: 'qwen-plus',
+    digestModel: 'qwen-plus'
+  },
+  gemini: {
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    miniModel: 'gemini-2.0-flash-lite',
+    digestModel: 'gemini-2.0-flash-lite'
+  }
+};
+
 export default function DashboardClient(): JSX.Element {
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [jobs, setJobs] = useState<JobRun[]>([]);
@@ -54,11 +81,11 @@ export default function DashboardClient(): JSX.Element {
   });
 
   const [providerForm, setProviderForm] = useState({
-    provider: 'deepseek' as 'deepseek' | 'qwen',
-    baseUrl: 'https://api.deepseek.com',
+    provider: 'deepseek' as ProviderName,
+    baseUrl: PROVIDER_PRESET.deepseek.baseUrl,
     apiKey: '',
-    miniModel: 'deepseek-chat',
-    digestModel: 'deepseek-reasoner',
+    miniModel: PROVIDER_PRESET.deepseek.miniModel,
+    digestModel: PROVIDER_PRESET.deepseek.digestModel,
     enabled: true,
     priority: 100,
     monthlyBudgetCny: 100
@@ -201,6 +228,17 @@ export default function DashboardClient(): JSX.Element {
     return styles.jobStatusPending;
   };
 
+  const onProviderChange = (nextProvider: ProviderName): void => {
+    const preset = PROVIDER_PRESET[nextProvider];
+    setProviderForm((prev) => ({
+      ...prev,
+      provider: nextProvider,
+      baseUrl: preset.baseUrl,
+      miniModel: preset.miniModel,
+      digestModel: preset.digestModel
+    }));
+  };
+
   return (
     <div className={styles.dashboard}>
       <header className={styles.topBar}>
@@ -220,7 +258,7 @@ export default function DashboardClient(): JSX.Element {
         <section className={styles.section}>
           <div className={styles.sectionHeader}>
             <h2>Provider 配置</h2>
-            <p className={styles.sectionDesc}>配置 AI 模型提供商（DeepSeek / Qwen）及 API 密钥</p>
+            <p className={styles.sectionDesc}>配置 AI 模型提供商（DeepSeek / Qwen / Gemini）及 API 密钥</p>
           </div>
 
           <div className={styles.formGrid}>
@@ -229,12 +267,11 @@ export default function DashboardClient(): JSX.Element {
               <select
                 className={styles.formSelect}
                 value={providerForm.provider}
-                onChange={(e) =>
-                  setProviderForm((prev) => ({ ...prev, provider: e.target.value as 'deepseek' | 'qwen' }))
-                }
+                onChange={(e) => onProviderChange(e.target.value as ProviderName)}
               >
                 <option value="deepseek">DeepSeek</option>
                 <option value="qwen">Qwen</option>
+                <option value="gemini">Gemini (cheap)</option>
               </select>
             </div>
 

@@ -19,6 +19,11 @@ export type SummaryResult = {
   tagsZh: string[];
   tagsEn: string[];
   actions: string[];
+  coreViewpoint: string;
+  underlyingProblem: string;
+  keyTechnologies: Array<{ concept: string; solves: string }>;
+  claimTypes: Array<{ statement: string; label: 'fact' | 'opinion' | 'speculation' }>;
+  researchKeywordsEn: string[];
   qualityScore: number;
   provider: ProviderName;
   model: string;
@@ -75,6 +80,11 @@ export class AiService {
       tagsZh: ['未分类'],
       tagsEn: ['uncategorized'],
       actions: [],
+      coreViewpoint: item.text.slice(0, 60) || '无核心观点',
+      underlyingProblem: '待补充',
+      keyTechnologies: [],
+      claimTypes: [],
+      researchKeywordsEn: [],
       qualityScore: 0.4,
       provider: 'deepseek',
       model: 'fallback'
@@ -184,17 +194,74 @@ export class AiService {
   private normalizeMini(payload: Record<string, unknown>, provider: ProviderName, model: string): SummaryResult {
     const valueAsStringArray = (input: unknown): string[] =>
       Array.isArray(input) ? input.map((item) => String(item)).filter(Boolean) : [];
+    const claimLabelSet = new Set(['fact', 'opinion', 'speculation']);
+    const toClaimLabel = (input: unknown): 'fact' | 'opinion' | 'speculation' => {
+      const value = String(input ?? '').toLowerCase();
+      if (value === 'fact' || value === 'opinion' || value === 'speculation') {
+        return value;
+      }
+      return 'opinion';
+    };
 
     const quality = Number(payload.quality_score ?? 0.5);
+    const oneLinerZh = String(payload.one_liner_zh ?? '无摘要');
+    const oneLinerEn = String(payload.one_liner_en ?? 'No summary');
+
+    const keyTechnologies = Array.isArray(payload.key_technologies)
+      ? payload.key_technologies
+          .flatMap((item): Array<{ concept: string; solves: string }> => {
+            if (!item || typeof item !== 'object') {
+              return [];
+            }
+
+            const value = item as Record<string, unknown>;
+            const concept = String(value.concept ?? '').trim();
+            const solves = String(value.solves ?? '').trim();
+            if (!concept || !solves) {
+              return [];
+            }
+
+            return [{ concept, solves }];
+          })
+          .slice(0, 8)
+      : [];
+
+    const claimTypes = Array.isArray(payload.claim_types)
+      ? payload.claim_types
+          .flatMap((item): Array<{ statement: string; label: 'fact' | 'opinion' | 'speculation' }> => {
+            if (!item || typeof item !== 'object') {
+              return [];
+            }
+
+            const value = item as Record<string, unknown>;
+            const statement = String(value.statement ?? '').trim();
+            const label = toClaimLabel(value.label);
+            if (!statement || !claimLabelSet.has(label)) {
+              return [];
+            }
+
+            return [{ statement, label }];
+          })
+          .slice(0, 10)
+      : [];
+
+    const researchKeywordsEn = valueAsStringArray(payload.research_keywords_en).slice(0, 6);
+    const coreViewpoint = String(payload.core_viewpoint ?? oneLinerZh).trim() || oneLinerZh;
+    const underlyingProblem = String(payload.underlying_problem ?? '').trim();
 
     return {
-      oneLinerZh: String(payload.one_liner_zh ?? '无摘要'),
-      oneLinerEn: String(payload.one_liner_en ?? 'No summary'),
+      oneLinerZh,
+      oneLinerEn,
       bulletsZh: valueAsStringArray(payload.bullets_zh).slice(0, 3),
       bulletsEn: valueAsStringArray(payload.bullets_en).slice(0, 3),
       tagsZh: valueAsStringArray(payload.tags_zh).slice(0, 5),
       tagsEn: valueAsStringArray(payload.tags_en).slice(0, 5),
       actions: valueAsStringArray(payload.actions).slice(0, 2),
+      coreViewpoint,
+      underlyingProblem,
+      keyTechnologies,
+      claimTypes,
+      researchKeywordsEn,
       qualityScore: Number.isFinite(quality) ? Math.max(0, Math.min(1, quality)) : 0.5,
       provider,
       model

@@ -1,8 +1,8 @@
 import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class UpsertProviderDto {
-  @IsIn(['deepseek', 'qwen'])
-  provider!: 'deepseek' | 'qwen';
+  @IsIn(['deepseek', 'qwen', 'gemini'])
+  provider!: 'deepseek' | 'qwen' | 'gemini';
 
   @IsString()
   @IsNotEmpty()

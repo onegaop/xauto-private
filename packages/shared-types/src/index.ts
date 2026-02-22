@@ -1,4 +1,4 @@
-export type ProviderName = 'deepseek' | 'qwen';
+export type ProviderName = 'deepseek' | 'qwen' | 'gemini';
 
 export type SummaryV1 = {
   tweetId: string;
