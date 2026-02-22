@@ -16,6 +16,9 @@ export default function HomePage(): JSX.Element {
             <p>
               <a href="/dashboard">Go to dashboard</a>
             </p>
+            <p>
+              <a href="/h5">Open H5 showcase</a>
+            </p>
             <button className="secondary" onClick={() => signOut()}>
               Sign out
             </button>
