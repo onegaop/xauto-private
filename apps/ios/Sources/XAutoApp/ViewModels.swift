@@ -7,10 +7,13 @@ final class TodayViewModel: ObservableObject {
     @Published var items: [BookmarkItemResponse] = []
     @Published var summaryStats: SummaryStatsResponse?
     @Published var digestHistory: [DigestResponse] = []
+    @Published var weatherActivity: WeatherActivityCardData?
     @Published var isLoading = false
     @Published var isLoadingMore = false
     @Published var isLoadingHistoryMore = false
+    @Published var isLoadingWeather = false
     @Published var errorMessage: String?
+    @Published var weatherErrorMessage: String?
 
     @Published var statsRange: StatsRange = .sevenDays
     @Published var historyPeriod: DigestPeriod = .daily
@@ -55,6 +58,7 @@ final class TodayViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
+        async let weatherTask = fetchWeatherActivity()
 
         do {
             async let digestTask = APIClient.shared.fetchTodayDigest()
@@ -69,12 +73,18 @@ final class TodayViewModel: ObservableObject {
             async let statsTask = APIClient.shared.fetchSummaryStats(range: statsRange)
 
             let (todayDigest, list, history, stats) = try await (digestTask, itemsTask, historyTask, statsTask)
+            let weatherResult = await weatherTask
+
             digest = todayDigest
             items = list.items
             nextCursor = list.nextCursor
             digestHistory = history.items
             historyNextCursor = history.nextCursor
             summaryStats = stats
+            if let weatherActivity = weatherResult.activity {
+                self.weatherActivity = weatherActivity
+            }
+            weatherErrorMessage = weatherResult.errorMessage
 
             if let todayDigest {
                 WidgetDigestStore.save(snapshot: todayDigest.widgetSnapshot)
@@ -82,7 +92,20 @@ final class TodayViewModel: ObservableObject {
             }
         } catch {
             errorMessage = error.localizedDescription
+            let weatherResult = await weatherTask
+            if let weatherActivity = weatherResult.activity {
+                self.weatherActivity = weatherActivity
+            }
+            weatherErrorMessage = weatherResult.errorMessage
         }
+    }
+
+    func refreshWeather() async {
+        let result = await fetchWeatherActivity()
+        if let weatherActivity = result.activity {
+            self.weatherActivity = weatherActivity
+        }
+        weatherErrorMessage = result.errorMessage
     }
 
     func loadMoreIfNeeded(currentItem: BookmarkItemResponse) async {
@@ -209,6 +232,27 @@ final class TodayViewModel: ObservableObject {
             errorMessage = error.localizedDescription
         }
     }
+
+    private func fetchWeatherActivity() async -> WeatherFetchResult {
+        isLoadingWeather = true
+        defer { isLoadingWeather = false }
+
+        do {
+            let raw = try await WeatherActivityService.fetchCurrentWeather()
+            let narration = await WeatherActivityNarrationService.narrate(from: raw)
+            return WeatherFetchResult(
+                activity: WeatherActivityCardData(raw: raw, narration: narration),
+                errorMessage: nil
+            )
+        } catch {
+            return WeatherFetchResult(activity: nil, errorMessage: error.localizedDescription)
+        }
+    }
+}
+
+private struct WeatherFetchResult {
+    let activity: WeatherActivityCardData?
+    let errorMessage: String?
 }
 
 @MainActor
@@ -239,7 +283,9 @@ final class WeekViewModel: ObservableObject {
 final class ItemDetailViewModel: ObservableObject {
     @Published var item: BookmarkItemResponse
     @Published var isRefreshing = false
+    @Published var isGeneratingLocalInsight = false
     @Published var errorMessage: String?
+    @Published var localInsight: LocalFunInsight?
 
     init(seed: BookmarkItemResponse) {
         self.item = seed
@@ -255,6 +301,23 @@ final class ItemDetailViewModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func generateLocalInsightIfEnabled() async {
+        let defaults = SharedDefaults.userDefaults
+        let enabled = defaults.bool(forKey: XAutoSharedKeys.localFunAIEnabled)
+        guard enabled else {
+            localInsight = LocalFunInsight(
+                title: "端侧增强已关闭",
+                highlights: ["可在 Settings 打开“端侧AI娱乐增强”。"],
+                suggestions: ["打开后可生成本地趣味洞察。"]
+            )
+            return
+        }
+
+        isGeneratingLocalInsight = true
+        defer { isGeneratingLocalInsight = false }
+        localInsight = LocalFunInsightService.generate(from: item.text)
     }
 }
 

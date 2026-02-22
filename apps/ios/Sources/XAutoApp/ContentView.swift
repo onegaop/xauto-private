@@ -50,6 +50,7 @@ struct TodayView: View {
                             ErrorCard(message: message)
                         }
 
+                        weatherSection
                         digestSection
                         insightsSection
                         historySection
@@ -70,6 +71,47 @@ struct TodayView: View {
             .navigationTitle("XAuto")
             .task {
                 await viewModel.load()
+            }
+        }
+    }
+
+    private var weatherSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                SectionTitle(title: "天气活动", subtitle: "WeatherKit + Foundation Models")
+                Spacer()
+                Button {
+                    Task { await viewModel.refreshWeather() }
+                } label: {
+                    if viewModel.isLoadingWeather {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+
+            if let activity = viewModel.weatherActivity {
+                WeatherActivityCard(activity: activity)
+                if let weatherErrorMessage = viewModel.weatherErrorMessage, !weatherErrorMessage.isEmpty {
+                    Text("最近一次刷新失败：\(weatherErrorMessage)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            } else if viewModel.isLoadingWeather {
+                GlassCard {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text("正在获取天气数据...")
+                            .font(.subheadline)
+                    }
+                }
+            } else if let weatherErrorMessage = viewModel.weatherErrorMessage {
+                EmptyStateCard(title: "天气暂不可用", detail: weatherErrorMessage)
+            } else {
+                EmptyStateCard(title: "暂无天气卡片", detail: "下拉刷新或点击右上角刷新天气。")
             }
         }
     }
@@ -450,6 +492,7 @@ struct WeekView: View {
 
 struct ItemDetailView: View {
     @StateObject private var viewModel: ItemDetailViewModel
+    @State private var activeWebURL: URL?
 
     init(seed: BookmarkItemResponse) {
         _viewModel = StateObject(wrappedValue: ItemDetailViewModel(seed: seed))
@@ -469,15 +512,20 @@ struct ItemDetailView: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        Text(viewModel.item.text)
-                            .font(.body)
-                            .fixedSize(horizontal: false, vertical: true)
+                        RichPostTextView(text: viewModel.item.text) { tappedURL in
+                            activeWebURL = tappedURL
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
 
                         if let url = URL(string: viewModel.item.url), !viewModel.item.url.isEmpty {
-                            Link(destination: url) {
+                            Button {
+                                activeWebURL = url
+                            } label: {
                                 Label("Open on X", systemImage: "arrow.up.right.square")
                                     .font(.subheadline.weight(.semibold))
                             }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -584,6 +632,40 @@ struct ItemDetailView: View {
                     }
                 }
 
+                GlassCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            SectionTitle(title: "端侧AI娱乐增强", subtitle: "不影响主摘要流程")
+                            Spacer()
+                            if viewModel.isGeneratingLocalInsight {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                        }
+
+                        Button("生成趣味洞察") {
+                            Task { await viewModel.generateLocalInsightIfEnabled() }
+                        }
+                        .buttonStyle(.borderedProminent)
+
+                        if let localInsight = viewModel.localInsight {
+                            Text(localInsight.title)
+                                .font(.subheadline.weight(.semibold))
+                            ForEach(localInsight.highlights, id: \.self) { line in
+                                Text("• \(line)")
+                                    .font(.footnote)
+                            }
+                            if !localInsight.suggestions.isEmpty {
+                                Divider()
+                                ForEach(localInsight.suggestions, id: \.self) { line in
+                                    Label(line, systemImage: "sparkles")
+                                        .font(.footnote)
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if let errorMessage = viewModel.errorMessage {
                     ErrorCard(message: errorMessage)
                 }
@@ -604,6 +686,16 @@ struct ItemDetailView: View {
                         Image(systemName: "arrow.clockwise")
                     }
                 }
+            }
+        }
+        .sheet(isPresented: Binding(get: { activeWebURL != nil }, set: { isShown in
+            if !isShown {
+                activeWebURL = nil
+            }
+        })) {
+            if let url = activeWebURL {
+                InAppSafariView(url: url)
+                    .ignoresSafeArea()
             }
         }
     }
@@ -650,6 +742,8 @@ struct SettingsView: View {
 
     @AppStorage(XAutoSharedKeys.pat, store: UserDefaults(suiteName: XAutoSharedKeys.appGroupID))
     private var pat = ""
+    @AppStorage(XAutoSharedKeys.localFunAIEnabled, store: UserDefaults(suiteName: XAutoSharedKeys.appGroupID))
+    private var localFunAIEnabled = true
 
     @StateObject private var viewModel = SettingsViewModel()
     @State private var revealToken = false
@@ -674,6 +768,13 @@ struct SettingsView: View {
                     }
 
                     Toggle("Show PAT", isOn: $revealToken)
+                }
+
+                Section("AI") {
+                    Toggle("端侧AI娱乐增强", isOn: $localFunAIEnabled)
+                    Text("仅用于本地趣味补充，不影响现有摘要与后端逻辑。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("Actions") {
@@ -774,6 +875,48 @@ private struct TopItemRow: View {
                     Text(item.nextStep)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
+private struct WeatherActivityCard: View {
+    let activity: WeatherActivityCardData
+
+    var body: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    Image(systemName: activity.raw.symbolName)
+                        .font(.title3)
+                        .foregroundStyle(Color.orange)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(activity.raw.locationName) · \(activity.raw.temperatureC)°C")
+                            .font(.headline)
+                        Text("\(activity.raw.conditionText) · \(timeString(activity.raw.observationDate)) 更新")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Text(activity.narration.source)
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.orange.opacity(0.12), in: Capsule())
+                }
+
+                Text(activity.narration.summary)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+
+                if !activity.narration.suggestions.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(activity.narration.suggestions, id: \.self) { suggestion in
+                            Label(suggestion, systemImage: "figure.walk")
+                                .font(.footnote)
+                        }
+                    }
                 }
             }
         }
@@ -934,4 +1077,11 @@ private func relativeDate(_ isoString: String) -> String {
     let formatter = RelativeDateTimeFormatter()
     formatter.unitsStyle = .short
     return formatter.localizedString(for: date, relativeTo: Date())
+}
+
+private func timeString(_ date: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "zh_CN")
+    formatter.dateFormat = "HH:mm"
+    return formatter.string(from: date)
 }

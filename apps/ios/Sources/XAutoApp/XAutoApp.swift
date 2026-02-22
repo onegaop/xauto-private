@@ -9,6 +9,9 @@ struct XAutoApp: App {
         if defaults.string(forKey: XAutoSharedKeys.apiBase) == nil {
             defaults.set(XAutoSharedKeys.defaultAPIBase, forKey: XAutoSharedKeys.apiBase)
         }
+        if defaults.object(forKey: XAutoSharedKeys.localFunAIEnabled) == nil {
+            defaults.set(true, forKey: XAutoSharedKeys.localFunAIEnabled)
+        }
     }
 
     var body: some Scene {

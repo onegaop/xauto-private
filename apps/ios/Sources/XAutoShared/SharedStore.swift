@@ -4,6 +4,7 @@ enum XAutoSharedKeys {
     static let appGroupID = "group.com.xauto.shared"
     static let apiBase = "xauto_api_base"
     static let pat = "xauto_pat"
+    static let localFunAIEnabled = "xauto_local_fun_ai_enabled"
     static let widgetDigest = "xauto_widget_digest"
     static let widgetKind = "XAutoWidget"
     static let defaultAPIBase = "https://xauto-api-516721184000.asia-east1.run.app"
