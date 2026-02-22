@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { DigestReport, DigestReportDocument } from '../../database/schemas/digest-report.schema';
 import { ItemSummary, ItemSummaryDocument } from '../../database/schemas/item-summary.schema';
+import { BookmarkItem, BookmarkItemDocument } from '../../database/schemas/bookmark-item.schema';
 import { getEnv } from '../../config/env';
 import { dayKey, dayRange, nowInTimezone, weekKey, weekRange } from '../../common/utils/date';
 import { AiService } from '../ai/ai.service';
@@ -10,6 +11,8 @@ import { AiService } from '../ai/ai.service';
 @Injectable()
 export class DigestService {
   constructor(
+    @InjectModel(BookmarkItem.name)
+    private readonly bookmarkItemModel: Model<BookmarkItemDocument>,
     @InjectModel(ItemSummary.name)
     private readonly itemSummaryModel: Model<ItemSummaryDocument>,
     @InjectModel(DigestReport.name)
@@ -23,20 +26,15 @@ export class DigestService {
     const key = dayKey(now);
     const range = dayRange(now);
 
-    const summaries = await this.itemSummaryModel
-      .find({ summarizedAt: { $gte: range.start, $lte: range.end } })
-      .sort({ summarizedAt: -1 })
+    const bookmarks = await this.bookmarkItemModel
+      .find({ createdAtX: { $gte: range.start, $lte: range.end } })
+      .sort({ createdAtX: -1, _id: -1 })
       .limit(500);
 
+    const digestItems = await this.buildDigestItemsFromBookmarks(bookmarks);
     const digest = await this.aiService.generateDigest(
       'daily',
-      summaries.map((item) => ({
-        tweetId: item.tweetId,
-        oneLinerZh: item.oneLinerZh,
-        oneLinerEn: item.oneLinerEn,
-        tagsZh: item.tagsZh,
-        actions: item.actions
-      }))
+      digestItems
     );
 
     await this.digestReportModel.updateOne(
@@ -58,7 +56,7 @@ export class DigestService {
     return {
       period: 'daily',
       periodKey: key,
-      summaryCount: summaries.length,
+      summaryCount: digestItems.length,
       provider: digest.provider,
       model: digest.model
     };
@@ -70,20 +68,15 @@ export class DigestService {
     const key = weekKey(now);
     const range = weekRange(now);
 
-    const summaries = await this.itemSummaryModel
-      .find({ summarizedAt: { $gte: range.start, $lte: range.end } })
-      .sort({ summarizedAt: -1 })
+    const bookmarks = await this.bookmarkItemModel
+      .find({ createdAtX: { $gte: range.start, $lte: range.end } })
+      .sort({ createdAtX: -1, _id: -1 })
       .limit(2000);
 
+    const digestItems = await this.buildDigestItemsFromBookmarks(bookmarks);
     const digest = await this.aiService.generateDigest(
       'weekly',
-      summaries.map((item) => ({
-        tweetId: item.tweetId,
-        oneLinerZh: item.oneLinerZh,
-        oneLinerEn: item.oneLinerEn,
-        tagsZh: item.tagsZh,
-        actions: item.actions
-      }))
+      digestItems
     );
 
     await this.digestReportModel.updateOne(
@@ -105,9 +98,44 @@ export class DigestService {
     return {
       period: 'weekly',
       periodKey: key,
-      summaryCount: summaries.length,
+      summaryCount: digestItems.length,
       provider: digest.provider,
       model: digest.model
     };
+  }
+
+  private async buildDigestItemsFromBookmarks(
+    bookmarks: BookmarkItemDocument[]
+  ): Promise<Array<{ tweetId: string; oneLinerZh: string; oneLinerEn: string; tagsZh: string[]; actions: string[] }>> {
+    if (bookmarks.length === 0) {
+      return [];
+    }
+
+    const tweetIds = bookmarks.map((item) => item.tweetId);
+    const summaries = await this.itemSummaryModel.find({ tweetId: { $in: tweetIds }, version: 1 }).lean();
+    const summaryMap = new Map(summaries.map((item) => [item.tweetId, item]));
+
+    return bookmarks.map((item) => {
+      const summary = summaryMap.get(item.tweetId);
+      if (!summary) {
+        const fallbackZh = item.text.slice(0, 80) || '无摘要';
+        const fallbackEn = item.text.slice(0, 120) || 'No summary';
+        return {
+          tweetId: item.tweetId,
+          oneLinerZh: fallbackZh,
+          oneLinerEn: fallbackEn,
+          tagsZh: [],
+          actions: []
+        };
+      }
+
+      return {
+        tweetId: summary.tweetId,
+        oneLinerZh: summary.oneLinerZh,
+        oneLinerEn: summary.oneLinerEn,
+        tagsZh: summary.tagsZh,
+        actions: summary.actions
+      };
+    });
   }
 }

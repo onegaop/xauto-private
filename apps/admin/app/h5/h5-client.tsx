@@ -893,7 +893,14 @@ export default function H5Client(): JSX.Element {
                           <ul>
                             {(activeDigest.topItems ?? []).map((item) => (
                               <li key={item.tweetId}>
-                                <strong>#{item.tweetId}</strong> {item.reason}
+                                <button
+                                  type="button"
+                                  className={styles.topItemBtn}
+                                  onClick={() => void openItemDetail(item.tweetId)}
+                                >
+                                  <span className={styles.topItemTitle}>#{item.tweetId}</span>
+                                  <span className={styles.topItemReason}>{item.reason}</span>
+                                </button>
                               </li>
                             ))}
                           </ul>
@@ -1083,7 +1090,16 @@ export default function H5Client(): JSX.Element {
                         {hasItems ? (
                           <ul className={styles.historyItems}>
                             {(digest?.topItems ?? []).slice(0, 2).map((item) => (
-                              <li key={`${digest?.periodKey ?? 'item'}-${item.tweetId}`}>{item.reason}</li>
+                              <li key={`${digest?.periodKey ?? 'item'}-${item.tweetId}`}>
+                                <button
+                                  type="button"
+                                  className={styles.topItemBtn}
+                                  onClick={() => void openItemDetail(item.tweetId)}
+                                >
+                                  <span className={styles.topItemTitle}>#{item.tweetId}</span>
+                                  <span className={styles.topItemReason}>{item.reason}</span>
+                                </button>
+                              </li>
                             ))}
                           </ul>
                         ) : (

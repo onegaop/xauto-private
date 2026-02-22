@@ -68,10 +68,11 @@ export class AdminController {
   @Post('/jobs/:name/run')
   async runJob(
     @Headers('x-admin-email') adminEmail: string,
-    @Param('name') name: string
+    @Param('name') name: string,
+    @Body() payload?: Record<string, unknown>
   ): Promise<Record<string, unknown>> {
     await this.adminService.markAdminLogin(String(adminEmail || '').toLowerCase());
-    return this.adminService.runJob(name);
+    return this.adminService.runJob(name, payload);
   }
 
   @Post('/pat')

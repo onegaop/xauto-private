@@ -70,9 +70,10 @@ export class AdminService {
     return runs.map((run) => run.toObject() as unknown as Record<string, unknown>);
   }
 
-  async runJob(name: string): Promise<Record<string, unknown>> {
+  async runJob(name: string, payload?: Record<string, unknown>): Promise<Record<string, unknown>> {
     if (name === 'sync') {
-      return this.jobsService.triggerSync({ force: true, source: 'admin' });
+      const force = typeof payload?.force === 'boolean' ? payload.force : true;
+      return this.jobsService.triggerSync({ force, source: 'admin' });
     }
 
     if (name === 'digest_daily') {

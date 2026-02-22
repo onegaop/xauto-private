@@ -39,6 +39,22 @@ type SyncSettings = {
   nextRunAt: string | null;
 };
 
+type JobName = 'sync' | 'digest_daily' | 'digest_weekly';
+
+type JobInvokeLog = {
+  id: string;
+  name: JobName;
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  requestBody: Record<string, unknown>;
+  responseStatus: number;
+  ok: boolean;
+  responsePayload: unknown;
+  requestPath: string;
+  errorMessage: string | null;
+};
+
 const PROVIDER_PRESET: Record<
   ProviderName,
   {
@@ -64,9 +80,39 @@ const PROVIDER_PRESET: Record<
   }
 };
 
+const DEFAULT_JOB_PAYLOAD: Record<JobName, string> = {
+  sync: '{\n  \"force\": true\n}',
+  digest_daily: '{}',
+  digest_weekly: '{}'
+};
+
+const tryParseJsonObject = (input: string): { value: Record<string, unknown> | null; error: string | null } => {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return { value: {}, error: null };
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return { value: parsed as Record<string, unknown>, error: null };
+    }
+
+    return { value: null, error: '参数必须是 JSON 对象（例如 {}）' };
+  } catch {
+    return { value: null, error: 'JSON 格式错误，请检查逗号和引号' };
+  }
+};
+
+const asPrettyJson = (input: unknown): string => JSON.stringify(input, null, 2);
+
 export default function DashboardClient(): JSX.Element {
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [jobs, setJobs] = useState<JobRun[]>([]);
+  const [runningJob, setRunningJob] = useState<JobName | null>(null);
+  const [activeJobTab, setActiveJobTab] = useState<JobName>('sync');
+  const [jobPayloadDrafts, setJobPayloadDrafts] = useState<Record<JobName, string>>(DEFAULT_JOB_PAYLOAD);
+  const [jobInvokeLogs, setJobInvokeLogs] = useState<JobInvokeLog[]>([]);
   const [pat, setPat] = useState<string>('');
   const [message, setMessage] = useState<string>('');
   const [promptForm, setPromptForm] = useState<PromptConfig>({
@@ -148,17 +194,66 @@ export default function DashboardClient(): JSX.Element {
     setMessage(`保存失败: ${payload.error ?? res.statusText}`);
   };
 
-  const runJob = async (name: 'sync' | 'digest_daily' | 'digest_weekly'): Promise<void> => {
-    setMessage(`正在执行 ${name}...`);
-    const res = await fetch(`/api/admin/jobs/${name}/run`, { method: 'POST' });
-    if (res.ok) {
-      setMessage(`${name} 执行完成`);
-      await loadData();
+  const runJob = async (name: JobName): Promise<void> => {
+    const draft = jobPayloadDrafts[name] ?? '{}';
+    const parsed = tryParseJsonObject(draft);
+    if (!parsed.value) {
+      setMessage(`参数解析失败: ${parsed.error}`);
       return;
     }
 
-    const payload = (await res.json()) as { error?: string };
-    setMessage(`执行失败: ${payload.error ?? res.statusText}`);
+    const requestBody = parsed.value;
+    const requestPath = `/api/admin/jobs/${name}/run`;
+    const startedAt = new Date();
+    const startedPerf = performance.now();
+
+    setRunningJob(name);
+    setMessage(`正在执行 ${name}...`);
+
+    let ok = false;
+    let responseStatus = 500;
+    let responsePayload: unknown = null;
+    let errorMessage: string | null = null;
+
+    try {
+      const res = await fetch(requestPath, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+      responseStatus = res.status;
+      responsePayload = (await res.json().catch(() => null)) as unknown;
+      ok = res.ok;
+      if (!ok) {
+        const value = responsePayload as { error?: string; message?: string } | null;
+        errorMessage = value?.error ?? value?.message ?? res.statusText;
+        setMessage(`执行失败: ${errorMessage}`);
+      } else {
+        setMessage(`${name} 执行完成`);
+        await loadData();
+      }
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : String(error);
+      setMessage(`执行失败: ${errorMessage}`);
+    } finally {
+      const finishedAt = new Date();
+      const durationMs = Math.max(0, Math.round(performance.now() - startedPerf));
+      const log: JobInvokeLog = {
+        id: `${name}-${startedAt.getTime()}`,
+        name,
+        startedAt: startedAt.toISOString(),
+        finishedAt: finishedAt.toISOString(),
+        durationMs,
+        requestBody,
+        responseStatus,
+        ok,
+        responsePayload,
+        requestPath,
+        errorMessage
+      };
+      setJobInvokeLogs((previous) => [log, ...previous].slice(0, 20));
+      setRunningJob(null);
+    }
   };
 
   const createPat = async (): Promise<void> => {
@@ -237,6 +332,20 @@ export default function DashboardClient(): JSX.Element {
       miniModel: preset.miniModel,
       digestModel: preset.digestModel
     }));
+  };
+
+  const updateJobPayloadDraft = (name: JobName, value: string): void => {
+    setJobPayloadDrafts((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const formatActiveJobPayload = (): void => {
+    const parsed = tryParseJsonObject(jobPayloadDrafts[activeJobTab] ?? '{}');
+    if (!parsed.value) {
+      setMessage(`参数格式化失败: ${parsed.error}`);
+      return;
+    }
+
+    setJobPayloadDrafts((prev) => ({ ...prev, [activeJobTab]: asPrettyJson(parsed.value) }));
   };
 
   return (
@@ -386,31 +495,123 @@ export default function DashboardClient(): JSX.Element {
             <button
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
+              disabled={runningJob !== null}
               onClick={() => void runJob('sync')}
             >
-              执行同步
+              {runningJob === 'sync' ? '执行中...' : '执行同步'}
             </button>
             <button
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
+              disabled={runningJob !== null}
               onClick={() => void runJob('digest_daily')}
             >
-              执行每日摘要
+              {runningJob === 'digest_daily' ? '执行中...' : '执行每日摘要'}
             </button>
             <button
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
+              disabled={runningJob !== null}
               onClick={() => void runJob('digest_weekly')}
             >
-              执行每周摘要
+              {runningJob === 'digest_weekly' ? '执行中...' : '执行每周摘要'}
             </button>
             <button
               type="button"
               className={`${styles.btn} ${styles.btnSecondary}`}
+              disabled={runningJob !== null}
               onClick={() => void loadData()}
             >
               刷新列表
             </button>
+          </div>
+
+          <div className={styles.jobDebugPanel}>
+            <div className={styles.jobDebugHeader}>
+              <h3 className={styles.subsectionTitle}>触发调试</h3>
+              <p className={styles.sectionDesc}>查看每次触发的入参、接口返回值、状态码与耗时。</p>
+            </div>
+
+            <div className={styles.jobTabs}>
+              {(['sync', 'digest_daily', 'digest_weekly'] as JobName[]).map((jobName) => (
+                <button
+                  key={jobName}
+                  type="button"
+                  className={activeJobTab === jobName ? styles.jobTabActive : styles.jobTab}
+                  onClick={() => setActiveJobTab(jobName)}
+                >
+                  {jobName}
+                </button>
+              ))}
+            </div>
+
+            <label className={styles.formLabel} htmlFor="job-payload-json">
+              Request Body (JSON)
+            </label>
+            <textarea
+              id="job-payload-json"
+              className={`${styles.formTextarea} ${styles.jobPayloadTextarea}`}
+              value={jobPayloadDrafts[activeJobTab]}
+              onChange={(event) => updateJobPayloadDraft(activeJobTab, event.target.value)}
+            />
+
+            <div className={styles.btnGroup}>
+              <button
+                type="button"
+                className={`${styles.btn} ${styles.btnPrimary}`}
+                disabled={runningJob !== null}
+                onClick={() => void runJob(activeJobTab)}
+              >
+                {runningJob === activeJobTab ? `执行中 ${activeJobTab}...` : `执行 ${activeJobTab}`}
+              </button>
+              <button type="button" className={`${styles.btn} ${styles.btnSecondary}`} onClick={formatActiveJobPayload}>
+                格式化 JSON
+              </button>
+              <button
+                type="button"
+                className={`${styles.btn} ${styles.btnSecondary}`}
+                onClick={() => updateJobPayloadDraft(activeJobTab, DEFAULT_JOB_PAYLOAD[activeJobTab])}
+              >
+                重置参数
+              </button>
+            </div>
+
+            <div className={styles.jobLogList}>
+              {jobInvokeLogs.length === 0 ? (
+                <p className={styles.jobLogEmpty}>尚无触发记录，执行任务后会在这里展示完整请求和响应。</p>
+              ) : (
+                jobInvokeLogs.map((log) => (
+                  <details key={log.id} className={styles.jobLogCard}>
+                    <summary className={styles.jobLogSummary}>
+                      <span className={styles.jobLogName}>{log.name}</span>
+                      <span className={log.ok ? styles.jobLogStatusOk : styles.jobLogStatusError}>
+                        {log.responseStatus}
+                      </span>
+                      <span className={styles.jobLogMeta}>
+                        {new Date(log.startedAt).toLocaleString('zh-CN')} · {log.durationMs}ms
+                      </span>
+                    </summary>
+                    <div className={styles.jobLogBody}>
+                      <div className={styles.jobLogLine}>
+                        <strong>Request</strong>
+                        <code>
+                          POST {log.requestPath}
+                        </code>
+                      </div>
+                      <pre className={styles.jobLogPre}>{asPrettyJson(log.requestBody)}</pre>
+                      <div className={styles.jobLogLine}>
+                        <strong>Response</strong>
+                        <code>
+                          HTTP {log.responseStatus} {log.ok ? 'OK' : 'ERROR'}
+                        </code>
+                      </div>
+                      <pre className={styles.jobLogPre}>{asPrettyJson(log.responsePayload)}</pre>
+                      {log.errorMessage ? <p className={styles.jobLogError}>Error: {log.errorMessage}</p> : null}
+                    </div>
+                  </details>
+                ))
+              )}
+            </div>
           </div>
 
           <ul className={styles.jobList}>

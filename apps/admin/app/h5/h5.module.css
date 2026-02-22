@@ -448,6 +448,39 @@
   font-weight: 600;
 }
 
+.topItemBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 10px;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
+}
+
+.topItemBtn:hover {
+  border-color: var(--border-strong);
+  background: var(--bg);
+}
+
+.topItemTitle {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.topItemReason {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
 /* 空状态 */
 .emptyCard {
   padding: 32px 24px;
