@@ -9,6 +9,7 @@ import { dayKey, nowInTimezone, weekKey } from '../../common/utils/date';
 
 type DigestPeriod = 'daily' | 'weekly';
 type ClaimLabel = 'fact' | 'opinion' | 'speculation';
+type DigestTopItem = { tweetId: string; reason: string; nextStep: string };
 
 @Injectable()
 export class MobileService {
@@ -25,14 +26,16 @@ export class MobileService {
     const env = getEnv();
     const key = dayKey(nowInTimezone(env.TIMEZONE));
 
-    return this.digestReportModel.findOne({ period: 'daily', periodKey: key }).lean();
+    const digest = await this.digestReportModel.findOne({ period: 'daily', periodKey: key }).lean();
+    return this.sortDigestTopItemsBySyncedAt(digest as Record<string, unknown> | null);
   }
 
   async getWeekDigest(): Promise<Record<string, unknown> | null> {
     const env = getEnv();
     const key = weekKey(nowInTimezone(env.TIMEZONE));
 
-    return this.digestReportModel.findOne({ period: 'weekly', periodKey: key }).lean();
+    const digest = await this.digestReportModel.findOne({ period: 'weekly', periodKey: key }).lean();
+    return this.sortDigestTopItemsBySyncedAt(digest as Record<string, unknown> | null);
   }
 
   async getDigestHistory(periodRaw?: string, limitRaw?: string, cursor?: string): Promise<Record<string, unknown>> {
@@ -56,6 +59,7 @@ export class MobileService {
 
     const hasMore = docs.length > limit;
     const items = hasMore ? docs.slice(0, limit) : docs;
+    const orderedItems = await this.sortDigestListTopItemsBySyncedAt(items as Array<Record<string, unknown>>);
     const last = items.at(-1);
     const generatedAt = last?.generatedAt ? new Date(last.generatedAt) : null;
     const nextCursor = hasMore && last
@@ -66,7 +70,7 @@ export class MobileService {
       : null;
 
     return {
-      items,
+      items: orderedItems,
       nextCursor
     };
   }
@@ -336,6 +340,108 @@ export class MobileService {
 
   private encodeCursor(payload: Record<string, string>): string {
     return Buffer.from(JSON.stringify(payload)).toString('base64url');
+  }
+
+  private async sortDigestTopItemsBySyncedAt(
+    digest: Record<string, unknown> | null
+  ): Promise<Record<string, unknown> | null> {
+    if (!digest) {
+      return null;
+    }
+
+    const [ordered] = await this.sortDigestListTopItemsBySyncedAt([digest]);
+    return ordered ?? digest;
+  }
+
+  private async sortDigestListTopItemsBySyncedAt(
+    digests: Array<Record<string, unknown>>
+  ): Promise<Array<Record<string, unknown>>> {
+    if (digests.length === 0) {
+      return digests;
+    }
+
+    const tweetIds = new Set<string>();
+    const parsedTopItemsByDigest = digests.map((digest) => {
+      const topItems = this.parseDigestTopItems(digest.topItems);
+      for (const item of topItems) {
+        tweetIds.add(item.tweetId);
+      }
+      return topItems;
+    });
+
+    if (tweetIds.size === 0) {
+      return digests;
+    }
+
+    const bookmarks = await this.bookmarkItemModel
+      .find({ tweetId: { $in: Array.from(tweetIds) } })
+      .select('tweetId syncedAt createdAt')
+      .lean();
+
+    const syncedAtMsByTweetId = new Map<string, number>();
+    for (const bookmark of bookmarks) {
+      const syncedAt = bookmark.syncedAt instanceof Date ? bookmark.syncedAt : null;
+      const createdAt = (bookmark as { createdAt?: Date }).createdAt instanceof Date
+        ? (bookmark as { createdAt?: Date }).createdAt
+        : null;
+      const effectiveDate = syncedAt ?? createdAt;
+      if (effectiveDate) {
+        syncedAtMsByTweetId.set(bookmark.tweetId, effectiveDate.getTime());
+      }
+    }
+
+    return digests.map((digest, index) => {
+      const topItems = parsedTopItemsByDigest[index] ?? [];
+      if (topItems.length < 2) {
+        return digest;
+      }
+
+      const sortedTopItems = topItems
+        .map((item, itemIndex) => ({
+          item,
+          itemIndex,
+          syncedAtMs: syncedAtMsByTweetId.get(item.tweetId) ?? Number.MIN_SAFE_INTEGER
+        }))
+        .sort((a, b) => {
+          if (a.syncedAtMs !== b.syncedAtMs) {
+            return b.syncedAtMs - a.syncedAtMs;
+          }
+          return a.itemIndex - b.itemIndex;
+        })
+        .map((entry) => entry.item);
+
+      return {
+        ...digest,
+        topItems: sortedTopItems
+      };
+    });
+  }
+
+  private parseDigestTopItems(raw: unknown): DigestTopItem[] {
+    if (!Array.isArray(raw)) {
+      return [];
+    }
+
+    const out: DigestTopItem[] = [];
+    for (const entry of raw) {
+      if (!entry || typeof entry !== 'object') {
+        continue;
+      }
+
+      const record = entry as Record<string, unknown>;
+      const tweetId = typeof record.tweetId === 'string' ? record.tweetId.trim() : '';
+      if (!tweetId) {
+        continue;
+      }
+
+      out.push({
+        tweetId,
+        reason: typeof record.reason === 'string' ? record.reason : '',
+        nextStep: typeof record.nextStep === 'string' ? record.nextStep : ''
+      });
+    }
+
+    return out;
   }
 
   private isValidDate(date: Date): boolean {
