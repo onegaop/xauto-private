@@ -23,7 +23,7 @@ export class BookmarkItem {
   @Prop({ type: Object, required: true })
   rawJson!: Record<string, unknown>;
 
-  @Prop({ required: true })
+  @Prop({ required: true, index: true })
   syncedAt!: Date;
 }
 

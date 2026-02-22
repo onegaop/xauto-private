@@ -25,10 +25,11 @@ export class DigestService {
     const now = nowInTimezone(env.TIMEZONE);
     const key = dayKey(now);
     const range = dayRange(now);
+    const syncTimeFilter = this.buildSyncTimeFilter(range);
 
     const bookmarks = await this.bookmarkItemModel
-      .find({ createdAtX: { $gte: range.start, $lte: range.end } })
-      .sort({ createdAtX: -1, _id: -1 })
+      .find(syncTimeFilter)
+      .sort({ syncedAt: -1, _id: -1 })
       .limit(500);
 
     const digestItems = await this.buildDigestItemsFromBookmarks(bookmarks);
@@ -67,10 +68,11 @@ export class DigestService {
     const now = nowInTimezone(env.TIMEZONE);
     const key = weekKey(now);
     const range = weekRange(now);
+    const syncTimeFilter = this.buildSyncTimeFilter(range);
 
     const bookmarks = await this.bookmarkItemModel
-      .find({ createdAtX: { $gte: range.start, $lte: range.end } })
-      .sort({ createdAtX: -1, _id: -1 })
+      .find(syncTimeFilter)
+      .sort({ syncedAt: -1, _id: -1 })
       .limit(2000);
 
     const digestItems = await this.buildDigestItemsFromBookmarks(bookmarks);
@@ -137,5 +139,17 @@ export class DigestService {
         actions: summary.actions
       };
     });
+  }
+
+  private buildSyncTimeFilter(range: { start: Date; end: Date }): Record<string, unknown> {
+    return {
+      $or: [
+        { syncedAt: { $gte: range.start, $lte: range.end } },
+        {
+          syncedAt: { $exists: false },
+          createdAt: { $gte: range.start, $lte: range.end }
+        }
+      ]
+    };
   }
 }

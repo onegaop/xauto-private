@@ -91,9 +91,22 @@ export class SyncService {
       totalFetched += items.length;
       nextToken = response.nextToken;
 
+      const seenAt = new Date();
       const tweetIds = items.map((item) => item.tweetId);
-      const existing = await this.bookmarkItemModel.find({ tweetId: { $in: tweetIds } }).select('tweetId');
+      const existing = await this.bookmarkItemModel
+        .find({ tweetId: { $in: tweetIds } })
+        .select('tweetId syncedAt createdAt')
+        .lean();
       const existingIds = new Set(existing.map((item) => item.tweetId));
+      const existingSyncTimeById = new Map(
+        existing.map((item) => {
+          const createdAt = (item as { createdAt?: Date }).createdAt;
+          return [
+            item.tweetId,
+            item.syncedAt instanceof Date ? item.syncedAt : createdAt instanceof Date ? createdAt : undefined
+          ] as const;
+        })
+      );
 
       const existingItems = items.filter((item) => existingIds.has(item.tweetId));
       const newItems = items.filter((item) => !existingIds.has(item.tweetId));
@@ -101,21 +114,24 @@ export class SyncService {
 
       if (existingItems.length > 0) {
         await this.bookmarkItemModel.bulkWrite(
-          existingItems.map((item) => ({
-            updateOne: {
-              filter: { tweetId: item.tweetId },
-              update: {
-                $set: {
-                  createdAtX: item.createdAtX,
-                  authorName: item.authorName,
-                  url: item.url,
-                  rawJson: item.rawJson,
-                  syncedAt: new Date()
-                }
-              },
-              upsert: true
-            }
-          }))
+          existingItems.map((item) => {
+            const syncedAt = existingSyncTimeById.get(item.tweetId) ?? seenAt;
+            return {
+              updateOne: {
+                filter: { tweetId: item.tweetId },
+                update: {
+                  $set: {
+                    createdAtX: item.createdAtX,
+                    authorName: item.authorName,
+                    url: item.url,
+                    rawJson: item.rawJson,
+                    syncedAt
+                  }
+                },
+                upsert: true
+              }
+            };
+          })
         );
       }
 
@@ -141,7 +157,7 @@ export class SyncService {
                     text: text || '[text unavailable]',
                     url: detail?.url ?? item.url,
                     rawJson: detail?.rawJson ?? item.rawJson,
-                    syncedAt: new Date()
+                    syncedAt: seenAt
                   }
                 },
                 upsert: true
