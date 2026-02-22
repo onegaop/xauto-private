@@ -18,26 +18,31 @@ create_job() {
   local schedule="$2"
   local endpoint="$3"
 
-  gcloud scheduler jobs create http "$name" \
+  if gcloud scheduler jobs describe "$name" \
     --project "$PROJECT_ID" \
-    --location "$REGION" \
-    --schedule "$schedule" \
-    --time-zone "Asia/Shanghai" \
-    --uri "${API_BASE_URL}${endpoint}" \
-    --http-method POST \
-    --headers "X-Internal-Job-Token=${INTERNAL_JOB_TOKEN}" \
-    --oidc-service-account-email "$JOB_SA" \
-    --oidc-token-audience "$API_BASE_URL" || \
-  gcloud scheduler jobs update http "$name" \
-    --project "$PROJECT_ID" \
-    --location "$REGION" \
-    --schedule "$schedule" \
-    --time-zone "Asia/Shanghai" \
-    --uri "${API_BASE_URL}${endpoint}" \
-    --http-method POST \
-    --headers "X-Internal-Job-Token=${INTERNAL_JOB_TOKEN}" \
-    --oidc-service-account-email "$JOB_SA" \
-    --oidc-token-audience "$API_BASE_URL"
+    --location "$REGION" >/dev/null 2>&1; then
+    gcloud scheduler jobs update http "$name" \
+      --project "$PROJECT_ID" \
+      --location "$REGION" \
+      --schedule "$schedule" \
+      --time-zone "Asia/Shanghai" \
+      --uri "${API_BASE_URL}${endpoint}" \
+      --http-method POST \
+      --update-headers "X-Internal-Job-Token=${INTERNAL_JOB_TOKEN}" \
+      --oidc-service-account-email "$JOB_SA" \
+      --oidc-token-audience "$API_BASE_URL"
+  else
+    gcloud scheduler jobs create http "$name" \
+      --project "$PROJECT_ID" \
+      --location "$REGION" \
+      --schedule "$schedule" \
+      --time-zone "Asia/Shanghai" \
+      --uri "${API_BASE_URL}${endpoint}" \
+      --http-method POST \
+      --headers "X-Internal-Job-Token=${INTERNAL_JOB_TOKEN}" \
+      --oidc-service-account-email "$JOB_SA" \
+      --oidc-token-audience "$API_BASE_URL"
+  fi
 }
 
 create_job "xauto-sync" "*/30 * * * *" "/v1/internal/jobs/sync"
