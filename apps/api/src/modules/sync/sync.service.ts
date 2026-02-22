@@ -6,7 +6,7 @@ import { ItemSummary, ItemSummaryDocument } from '../../database/schemas/item-su
 import { SyncState, SyncStateDocument } from '../../database/schemas/sync-state.schema';
 import { AuthXService } from '../auth-x/auth-x.service';
 import { AiService } from '../ai/ai.service';
-import { XApiService } from './x-api.service';
+import { XApiService, XTweetDetailItem } from './x-api.service';
 
 @Injectable()
 export class SyncService {
@@ -95,19 +95,19 @@ export class SyncService {
       const existing = await this.bookmarkItemModel.find({ tweetId: { $in: tweetIds } }).select('tweetId');
       const existingIds = new Set(existing.map((item) => item.tweetId));
 
+      const existingItems = items.filter((item) => existingIds.has(item.tweetId));
       const newItems = items.filter((item) => !existingIds.has(item.tweetId));
       totalInserted += newItems.length;
 
-      if (items.length > 0) {
+      if (existingItems.length > 0) {
         await this.bookmarkItemModel.bulkWrite(
-          items.map((item) => ({
+          existingItems.map((item) => ({
             updateOne: {
               filter: { tweetId: item.tweetId },
               update: {
                 $set: {
                   createdAtX: item.createdAtX,
                   authorName: item.authorName,
-                  text: item.text,
                   url: item.url,
                   rawJson: item.rawJson,
                   syncedAt: new Date()
@@ -119,10 +119,48 @@ export class SyncService {
         );
       }
 
+      let detailsById = new Map<string, XTweetDetailItem>();
+      if (newItems.length > 0) {
+        const details = await this.xApiService.fetchTweetDetailsByIds(
+          accessToken,
+          newItems.map((item) => item.tweetId)
+        );
+        detailsById = new Map(details.map((item) => [item.tweetId, item]));
+
+        await this.bookmarkItemModel.bulkWrite(
+          newItems.map((item) => {
+            const detail = detailsById.get(item.tweetId);
+            const text = detail?.text?.trim() ?? '';
+            return {
+              updateOne: {
+                filter: { tweetId: item.tweetId },
+                update: {
+                  $set: {
+                    createdAtX: detail?.createdAtX ?? item.createdAtX,
+                    authorName: detail?.authorName ?? item.authorName,
+                    text: text || '[text unavailable]',
+                    url: detail?.url ?? item.url,
+                    rawJson: detail?.rawJson ?? item.rawJson,
+                    syncedAt: new Date()
+                  }
+                },
+                upsert: true
+              }
+            };
+          })
+        );
+      }
+
       for (const item of newItems) {
+        const detail = detailsById.get(item.tweetId);
+        const text = detail?.text?.trim() ?? '';
+        if (!text) {
+          continue;
+        }
+
         const summary = await this.aiService.generateMiniSummary({
           tweetId: item.tweetId,
-          text: item.text
+          text
         });
 
         await this.itemSummaryModel.updateOne(
