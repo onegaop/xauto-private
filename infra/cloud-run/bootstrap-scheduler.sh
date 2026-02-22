@@ -25,7 +25,7 @@ create_job() {
     --time-zone "Asia/Shanghai" \
     --uri "${API_BASE_URL}${endpoint}" \
     --http-method POST \
-    --headers "Authorization=Bearer ${INTERNAL_JOB_TOKEN}" \
+    --headers "X-Internal-Job-Token=${INTERNAL_JOB_TOKEN}" \
     --oidc-service-account-email "$JOB_SA" \
     --oidc-token-audience "$API_BASE_URL" || \
   gcloud scheduler jobs update http "$name" \
@@ -35,7 +35,7 @@ create_job() {
     --time-zone "Asia/Shanghai" \
     --uri "${API_BASE_URL}${endpoint}" \
     --http-method POST \
-    --headers "Authorization=Bearer ${INTERNAL_JOB_TOKEN}" \
+    --headers "X-Internal-Job-Token=${INTERNAL_JOB_TOKEN}" \
     --oidc-service-account-email "$JOB_SA" \
     --oidc-token-audience "$API_BASE_URL"
 }

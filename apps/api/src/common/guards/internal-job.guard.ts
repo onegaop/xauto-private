@@ -10,12 +10,16 @@ export class InternalJobGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest();
+    const customHeader = request.headers['x-internal-job-token'];
+    const customToken = typeof customHeader === 'string' ? customHeader : '';
     const authHeader = request.headers.authorization;
     const token = typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
       ? authHeader.slice('Bearer '.length)
       : '';
 
-    if (token !== env.INTERNAL_JOB_TOKEN) {
+    const effectiveToken = customToken || token;
+
+    if (effectiveToken !== env.INTERNAL_JOB_TOKEN) {
       throw new UnauthorizedException('Invalid internal job token');
     }
 
