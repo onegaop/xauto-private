@@ -10,6 +10,9 @@ packages:
   Atributika:
     url: https://github.com/psharanda/Atributika.git
     from: 5.0.0
+  MarkdownUI:
+    url: https://github.com/gonzalezreal/swift-markdown-ui
+    from: 2.4.1
 
 schemes:
   XAutoApp:
@@ -42,6 +45,8 @@ targets:
         product: Atributika
       - package: Atributika
         product: AtributikaViews
+      - package: MarkdownUI
+        product: MarkdownUI
       - target: XAutoWidget
         embed: true
 

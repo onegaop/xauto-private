@@ -19,6 +19,7 @@ export type SummaryResult = {
   tagsZh: string[];
   tagsEn: string[];
   actions: string[];
+  renderMarkdown: string;
   coreViewpoint: string;
   underlyingProblem: string;
   keyTechnologies: Array<{ concept: string; solves: string }>;
@@ -66,13 +67,20 @@ export class AiService {
 
         const normalized = this.normalizeMini(response, provider.provider, provider.miniModel);
         await this.budgetService.recordUsageCny(this.estimateMiniCost(item.text));
-        return normalized;
+        const renderMarkdown = await this.generateMiniMarkdown(item, normalized, provider).catch(() =>
+          this.buildMiniMarkdownFallback(normalized)
+        );
+
+        return {
+          ...normalized,
+          renderMarkdown
+        };
       } catch {
         continue;
       }
     }
 
-    return {
+    const fallback: SummaryResult = {
       oneLinerZh: item.text.slice(0, 20) || '无摘要',
       oneLinerEn: item.text.slice(0, 40) || 'No summary',
       bulletsZh: [item.text.slice(0, 80)],
@@ -80,6 +88,7 @@ export class AiService {
       tagsZh: ['未分类'],
       tagsEn: ['uncategorized'],
       actions: [],
+      renderMarkdown: '',
       coreViewpoint: item.text.slice(0, 60) || '无核心观点',
       underlyingProblem: '待补充',
       keyTechnologies: [],
@@ -88,6 +97,11 @@ export class AiService {
       qualityScore: 0.4,
       provider: 'deepseek',
       model: 'fallback'
+    };
+
+    return {
+      ...fallback,
+      renderMarkdown: this.buildMiniMarkdownFallback(fallback)
     };
   }
 
@@ -191,6 +205,48 @@ export class AiService {
     return extractJsonObject(content);
   }
 
+  private async callModelText(
+    baseUrl: string,
+    apiKey: string,
+    model: string,
+    messages: Array<{ role: string; content: string }>
+  ): Promise<string> {
+    const url = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
+
+    const response = await axios.post(
+      url,
+      {
+        model,
+        messages,
+        temperature: 0.4
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000
+      }
+    );
+
+    const content = response.data?.choices?.[0]?.message?.content;
+    if (typeof content === 'string') {
+      return content;
+    }
+
+    if (Array.isArray(content)) {
+      const joined = content
+        .map((item) => (item && typeof item === 'object' ? String((item as Record<string, unknown>).text ?? '') : ''))
+        .join('\n')
+        .trim();
+      if (joined) {
+        return joined;
+      }
+    }
+
+    throw new Error('Model response content missing');
+  }
+
   private normalizeMini(payload: Record<string, unknown>, provider: ProviderName, model: string): SummaryResult {
     const valueAsStringArray = (input: unknown): string[] =>
       Array.isArray(input) ? input.map((item) => String(item)).filter(Boolean) : [];
@@ -257,6 +313,7 @@ export class AiService {
       tagsZh: valueAsStringArray(payload.tags_zh).slice(0, 5),
       tagsEn: valueAsStringArray(payload.tags_en).slice(0, 5),
       actions: valueAsStringArray(payload.actions).slice(0, 2),
+      renderMarkdown: '',
       coreViewpoint,
       underlyingProblem,
       keyTechnologies,
@@ -266,6 +323,67 @@ export class AiService {
       provider,
       model
     };
+  }
+
+  private async generateMiniMarkdown(
+    item: BookmarkInput,
+    summary: Omit<SummaryResult, 'renderMarkdown'>,
+    provider: { provider: ProviderName; baseUrl: string; apiKey: string; miniModel: string }
+  ): Promise<string> {
+    const systemPrompt = await this.promptConfigService.getMiniMarkdownSystemPrompt();
+    const payload = {
+      tweet_id: item.tweetId,
+      one_liner_zh: summary.oneLinerZh,
+      one_liner_en: summary.oneLinerEn,
+      bullets_zh: summary.bulletsZh,
+      tags_zh: summary.tagsZh,
+      actions: summary.actions,
+      core_viewpoint: summary.coreViewpoint,
+      underlying_problem: summary.underlyingProblem
+    };
+
+    const content = await this.callModelText(provider.baseUrl, provider.apiKey, provider.miniModel, [
+      {
+        role: 'system',
+        content: systemPrompt
+      },
+      {
+        role: 'user',
+        content: `Post:\n<<< ${item.text} >>>\n\nStructured summary:\n${JSON.stringify(payload)}`
+      }
+    ]);
+
+    const markdown = this.normalizeMarkdown(content);
+    if (!markdown) {
+      throw new Error('Markdown content is empty');
+    }
+
+    await this.budgetService.recordUsageCny(this.estimateMiniMarkdownCost(item.text));
+    return markdown;
+  }
+
+  private normalizeMarkdown(input: string): string {
+    return input.replace(/\r\n/g, '\n').trim().slice(0, 8000);
+  }
+
+  private buildMiniMarkdownFallback(summary: Omit<SummaryResult, 'renderMarkdown'>): string {
+    const bullets = summary.bulletsZh.length > 0 ? summary.bulletsZh : [summary.oneLinerZh];
+    const actions = summary.actions.length > 0 ? summary.actions : ['持续跟踪后续信息'];
+    const tags = summary.tagsZh.length > 0 ? summary.tagsZh.join(' / ') : '未分类';
+
+    return [
+      `## 核心结论`,
+      summary.oneLinerZh,
+      '',
+      `## 关键要点`,
+      ...bullets.map((item) => `- ${item}`),
+      '',
+      `## 行动建议`,
+      ...actions.map((item) => `- ${item}`),
+      '',
+      `## 标签`,
+      tags
+    ].join('\n');
   }
 
   private normalizeDigest(payload: Record<string, unknown>, provider: ProviderName, model: string): DigestResult {
@@ -318,6 +436,10 @@ export class AiService {
 
   private estimateMiniCost(text: string): number {
     return Number((Math.max(1, text.length) * 0.00002).toFixed(6));
+  }
+
+  private estimateMiniMarkdownCost(text: string): number {
+    return Number((Math.max(1, text.length) * 0.00001).toFixed(6));
   }
 
   private estimateDigestCost(summaryCount: number): number {

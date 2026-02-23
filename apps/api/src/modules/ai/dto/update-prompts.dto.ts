@@ -10,4 +10,9 @@ export class UpdatePromptsDto {
   @IsString()
   @MinLength(20)
   digestSystem?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(20)
+  miniMarkdownSystem?: string;
 }

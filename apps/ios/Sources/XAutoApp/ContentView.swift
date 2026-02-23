@@ -1,4 +1,5 @@
 import SwiftUI
+import MarkdownUI
 
 // MARK: - Design System
 
@@ -665,6 +666,17 @@ struct ItemDetailView: View {
                 }
 
                 if let summary = viewModel.item.summary {
+                    if let renderMarkdown = summary.renderMarkdown?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !renderMarkdown.isEmpty {
+                        Card {
+                            VStack(alignment: .leading, spacing: DS.sm) {
+                                Text("Markdown 摘要")
+                                    .font(.headline)
+                                MarkdownTextBlock(markdown: renderMarkdown)
+                            }
+                        }
+                    }
+
                     Card {
                         VStack(alignment: .leading, spacing: DS.md) {
                             Text("摘要")
@@ -1260,6 +1272,20 @@ private struct TagFlow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct MarkdownTextBlock: View {
+    let markdown: String
+
+    var body: some View {
+        Markdown(markdown)
+            .markdownTheme(.gitHub)
+            .markdownTextStyle {
+                FontSize(.em(0.95))
+            }
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

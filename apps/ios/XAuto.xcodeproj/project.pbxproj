@@ -23,6 +23,7 @@
 		9BE1DE6F5A94B84FB138B6F5 /* DomainModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD264641BB68B316A0267646 /* DomainModels.swift */; };
 		ADB778B2ABD52662E029B5CB /* XAutoWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = D56612EF42B9853457163637 /* XAutoWidget.swift */; };
 		BBB7286A1D06D9FB41D8EEC7 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28278A8823E1AED0304A59ED /* APIClient.swift */; };
+		D1A960689746641650C6F2F0 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 72CE1F096DA9A96A56852F42 /* MarkdownUI */; };
 		EC9F977A51532E00B2206A20 /* LocalFunInsightService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8234DD65F18577C2AE812926 /* LocalFunInsightService.swift */; };
 /* End PBXBuildFile section */
 
@@ -78,6 +79,7 @@
 			files = (
 				005766E2658A8234F2505282 /* Atributika in Frameworks */,
 				170C6DF4DD3F56DD8940745E /* AtributikaViews in Frameworks */,
+				D1A960689746641650C6F2F0 /* MarkdownUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -164,6 +166,7 @@
 			packageProductDependencies = (
 				482ECEF2B8917F0A83F2F2C4 /* Atributika */,
 				5615BCAB9BFFFAFDF99FD1B1 /* AtributikaViews */,
+				72CE1F096DA9A96A56852F42 /* MarkdownUI */,
 			);
 			productName = XAutoApp;
 			productReference = 52FA32346DAFC5CCC62D608F /* XAutoApp.app */;
@@ -217,6 +220,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				3D675AF7792DA4340ED76055 /* XCRemoteSwiftPackageReference "Atributika" */,
+				D25C25B0B6282BE143580E55 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
@@ -512,6 +516,14 @@
 				minimumVersion = 5.0.0;
 			};
 		};
+		D25C25B0B6282BE143580E55 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/gonzalezreal/swift-markdown-ui";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.4.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -524,6 +536,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 3D675AF7792DA4340ED76055 /* XCRemoteSwiftPackageReference "Atributika" */;
 			productName = AtributikaViews;
+		};
+		72CE1F096DA9A96A56852F42 /* MarkdownUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D25C25B0B6282BE143580E55 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
+			productName = MarkdownUI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

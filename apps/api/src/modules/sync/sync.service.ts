@@ -175,6 +175,7 @@ export class SyncService {
               tagsZh: summary.tagsZh,
               tagsEn: summary.tagsEn,
               actions: summary.actions,
+              renderMarkdown: summary.renderMarkdown,
               coreViewpoint: summary.coreViewpoint,
               underlyingProblem: summary.underlyingProblem,
               keyTechnologies: summary.keyTechnologies,

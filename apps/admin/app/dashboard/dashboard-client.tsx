@@ -30,6 +30,10 @@ type JobRun = {
 type PromptConfig = {
   miniSummarySystem: string;
   digestSystem: string;
+  miniMarkdownSystem: string;
+  miniSummarySystemEditable: boolean;
+  digestSystemEditable: boolean;
+  miniMarkdownSystemEditable: boolean;
 };
 
 type SyncSettings = {
@@ -117,7 +121,11 @@ export default function DashboardClient(): JSX.Element {
   const [message, setMessage] = useState<string>('');
   const [promptForm, setPromptForm] = useState<PromptConfig>({
     miniSummarySystem: '',
-    digestSystem: ''
+    digestSystem: '',
+    miniMarkdownSystem: '',
+    miniSummarySystemEditable: false,
+    digestSystemEditable: false,
+    miniMarkdownSystemEditable: true
   });
   const [syncSettings, setSyncSettings] = useState<SyncSettings>({
     syncIntervalHours: 24,
@@ -157,7 +165,11 @@ export default function DashboardClient(): JSX.Element {
       const payload = (await promptsRes.json()) as Partial<PromptConfig>;
       setPromptForm({
         miniSummarySystem: String(payload.miniSummarySystem ?? ''),
-        digestSystem: String(payload.digestSystem ?? '')
+        digestSystem: String(payload.digestSystem ?? ''),
+        miniMarkdownSystem: String(payload.miniMarkdownSystem ?? ''),
+        miniSummarySystemEditable: Boolean(payload.miniSummarySystemEditable ?? false),
+        digestSystemEditable: Boolean(payload.digestSystemEditable ?? false),
+        miniMarkdownSystemEditable: Boolean(payload.miniMarkdownSystemEditable ?? true)
       });
     }
 
@@ -275,24 +287,6 @@ export default function DashboardClient(): JSX.Element {
     setMessage(`创建失败: ${payload.error ?? res.statusText}`);
   };
 
-  const savePrompts = async (): Promise<void> => {
-    setMessage('正在保存 Prompt 模板...');
-    const res = await fetch('/api/admin/prompts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(promptForm)
-    });
-
-    if (res.ok) {
-      setMessage('Prompt 已保存');
-      await loadData();
-      return;
-    }
-
-    const payload = (await res.json()) as { error?: string; message?: string };
-    setMessage(`保存失败: ${payload.error ?? payload.message ?? res.statusText}`);
-  };
-
   const saveSyncSettings = async (): Promise<void> => {
     setMessage('正在保存同步计划...');
     const res = await fetch('/api/admin/sync-settings', {
@@ -303,6 +297,24 @@ export default function DashboardClient(): JSX.Element {
 
     if (res.ok) {
       setMessage('同步计划已保存');
+      await loadData();
+      return;
+    }
+
+    const payload = (await res.json()) as { error?: string; message?: string };
+    setMessage(`保存失败: ${payload.error ?? payload.message ?? res.statusText}`);
+  };
+
+  const saveMiniMarkdownPrompt = async (): Promise<void> => {
+    setMessage('正在保存 Mini Markdown Prompt...');
+    const res = await fetch('/api/admin/prompts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ miniMarkdownSystem: promptForm.miniMarkdownSystem })
+    });
+
+    if (res.ok) {
+      setMessage('Mini Markdown Prompt 已保存');
       await loadData();
       return;
     }
@@ -674,7 +686,7 @@ export default function DashboardClient(): JSX.Element {
         <section className={styles.section}>
           <div className={styles.sectionHeader}>
             <h2>Prompt 模板</h2>
-            <p className={styles.sectionDesc}>用于摘要与 Digest 生成的系统提示词</p>
+            <p className={styles.sectionDesc}>结构化字段依赖这两个 Prompt 的固定输出格式，已锁定为只读</p>
           </div>
 
           <div className={styles.formGrid}>
@@ -684,9 +696,7 @@ export default function DashboardClient(): JSX.Element {
                 className={`${styles.formTextarea} ${styles.formTextareaLarge}`}
                 rows={14}
                 value={promptForm.miniSummarySystem}
-                onChange={(e) =>
-                  setPromptForm((prev) => ({ ...prev, miniSummarySystem: e.target.value }))
-                }
+                readOnly
               />
             </div>
             <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
@@ -695,9 +705,20 @@ export default function DashboardClient(): JSX.Element {
                 className={styles.formTextarea}
                 rows={8}
                 value={promptForm.digestSystem}
-                onChange={(e) =>
-                  setPromptForm((prev) => ({ ...prev, digestSystem: e.target.value }))
-                }
+                readOnly
+              />
+            </div>
+          </div>
+
+          <div className={styles.formGrid}>
+            <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
+              <label className={styles.formLabel}>Mini Markdown Prompt（可编辑）</label>
+              <textarea
+                className={`${styles.formTextarea} ${styles.formTextareaLarge}`}
+                rows={12}
+                value={promptForm.miniMarkdownSystem}
+                readOnly={!promptForm.miniMarkdownSystemEditable}
+                onChange={(e) => setPromptForm((prev) => ({ ...prev, miniMarkdownSystem: e.target.value }))}
               />
             </div>
           </div>
@@ -706,11 +727,14 @@ export default function DashboardClient(): JSX.Element {
             <button
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
-              onClick={() => void savePrompts()}
+              onClick={() => void saveMiniMarkdownPrompt()}
+              disabled={!promptForm.miniMarkdownSystemEditable}
             >
-              保存 Prompt
+              保存 Mini Markdown Prompt
             </button>
           </div>
+
+          <p className={styles.sectionDesc}>该 Prompt 仅影响自由 Markdown 展示，不影响结构化字段与筛选统计。</p>
         </section>
 
         {/* PAT */}

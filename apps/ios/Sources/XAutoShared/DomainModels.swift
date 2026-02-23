@@ -94,6 +94,7 @@ struct SummaryResponse: Codable {
     let tagsZh: [String]
     let tagsEn: [String]
     let actions: [String]
+    let renderMarkdown: String?
     let coreViewpoint: String?
     let underlyingProblem: String?
     let keyTechnologies: [KeyTechnology]
@@ -110,6 +111,7 @@ struct SummaryResponse: Codable {
         self.tagsZh = try container.decodeIfPresent([String].self, forKey: .tagsZh) ?? []
         self.tagsEn = try container.decodeIfPresent([String].self, forKey: .tagsEn) ?? []
         self.actions = try container.decodeIfPresent([String].self, forKey: .actions) ?? []
+        self.renderMarkdown = try container.decodeIfPresent(String.self, forKey: .renderMarkdown)
         self.coreViewpoint = try container.decodeIfPresent(String.self, forKey: .coreViewpoint)
         self.underlyingProblem = try container.decodeIfPresent(String.self, forKey: .underlyingProblem)
         self.keyTechnologies = try container.decodeIfPresent([KeyTechnology].self, forKey: .keyTechnologies) ?? []

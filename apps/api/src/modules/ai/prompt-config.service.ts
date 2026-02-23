@@ -6,6 +6,7 @@ import { UpdatePromptsDto } from './dto/update-prompts.dto';
 
 const MINI_PROMPT_KEY = 'prompt:mini_summary_system';
 const DIGEST_PROMPT_KEY = 'prompt:digest_system';
+const MINI_MARKDOWN_PROMPT_KEY = 'prompt:mini_markdown_system';
 
 const DEFAULT_MINI_PROMPT = `你是技术分析师。
 
@@ -42,9 +43,21 @@ JSON 必须包含以下字段：
 const DEFAULT_DIGEST_PROMPT =
   'You are a strict digest assistant. Output JSON keys: top_themes, top_items[{tweet_id,reason,next_step}], risks, tomorrow_actions.';
 
+const DEFAULT_MINI_MARKDOWN_PROMPT = `你是技术洞察编辑，请基于输入的 X post 与结构化摘要，输出一份可直接展示的 Markdown。
+
+要求：
+- 使用中文为主，可混合少量英文术语。
+- 输出结构建议：标题、核心结论、关键要点（3-5 条）、可执行建议（1-3 条）。
+- 保持简洁、可读，避免空话。
+- 只输出 Markdown 正文，不要 JSON，不要代码块围栏。`;
+
 type PromptSnapshot = {
   miniSummarySystem: string;
   digestSystem: string;
+  miniMarkdownSystem: string;
+  miniSummarySystemEditable: boolean;
+  digestSystemEditable: boolean;
+  miniMarkdownSystemEditable: boolean;
 };
 
 @Injectable()
@@ -71,42 +84,39 @@ export class PromptConfigService {
     return snapshot.digestSystem;
   }
 
+  async getMiniMarkdownSystemPrompt(): Promise<string> {
+    const snapshot = await this.getPromptSnapshot();
+    return snapshot.miniMarkdownSystem;
+  }
+
   async updatePrompts(dto: UpdatePromptsDto): Promise<PromptSnapshot> {
-    if (!dto.miniSummarySystem && !dto.digestSystem) {
+    if (!dto.miniSummarySystem && !dto.digestSystem && !dto.miniMarkdownSystem) {
       throw new BadRequestException('At least one prompt field is required');
     }
 
+    if (dto.miniSummarySystem || dto.digestSystem) {
+      throw new BadRequestException(
+        'Structured prompts are locked to protect output schema. Use non-structured prompts for freeform editing.'
+      );
+    }
+
+    if (!dto.miniMarkdownSystem) {
+      throw new BadRequestException('Only miniMarkdownSystem can be updated');
+    }
+
     const now = new Date().toISOString();
-
-    if (dto.miniSummarySystem) {
-      await this.syncStateModel.updateOne(
-        { key: MINI_PROMPT_KEY },
-        {
-          $set: {
-            value: {
-              text: dto.miniSummarySystem,
-              updatedAt: now
-            }
+    await this.syncStateModel.updateOne(
+      { key: MINI_MARKDOWN_PROMPT_KEY },
+      {
+        $set: {
+          value: {
+            text: dto.miniMarkdownSystem,
+            updatedAt: now
           }
-        },
-        { upsert: true }
-      );
-    }
-
-    if (dto.digestSystem) {
-      await this.syncStateModel.updateOne(
-        { key: DIGEST_PROMPT_KEY },
-        {
-          $set: {
-            value: {
-              text: dto.digestSystem,
-              updatedAt: now
-            }
-          }
-        },
-        { upsert: true }
-      );
-    }
+        }
+      },
+      { upsert: true }
+    );
 
     this.cache = null;
     return this.getPromptSnapshot(true);
@@ -118,15 +128,22 @@ export class PromptConfigService {
       return this.cache.snapshot;
     }
 
-    const docs = await this.syncStateModel.find({ key: { $in: [MINI_PROMPT_KEY, DIGEST_PROMPT_KEY] } });
+    const docs = await this.syncStateModel.find({
+      key: { $in: [MINI_PROMPT_KEY, DIGEST_PROMPT_KEY, MINI_MARKDOWN_PROMPT_KEY] }
+    });
 
     const byKey = new Map(docs.map((item) => [item.key, item]));
     const miniSummarySystem = this.extractPrompt(byKey.get(MINI_PROMPT_KEY), DEFAULT_MINI_PROMPT);
     const digestSystem = this.extractPrompt(byKey.get(DIGEST_PROMPT_KEY), DEFAULT_DIGEST_PROMPT);
+    const miniMarkdownSystem = this.extractPrompt(byKey.get(MINI_MARKDOWN_PROMPT_KEY), DEFAULT_MINI_MARKDOWN_PROMPT);
 
     const snapshot: PromptSnapshot = {
       miniSummarySystem,
-      digestSystem
+      digestSystem,
+      miniMarkdownSystem,
+      miniSummarySystemEditable: false,
+      digestSystemEditable: false,
+      miniMarkdownSystemEditable: true
     };
 
     this.cache = {

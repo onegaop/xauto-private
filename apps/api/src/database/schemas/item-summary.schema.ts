@@ -33,6 +33,9 @@ export class ItemSummary {
   actions!: string[];
 
   @Prop({ default: '' })
+  renderMarkdown!: string;
+
+  @Prop({ default: '' })
   coreViewpoint!: string;
 
   @Prop({ default: '' })
