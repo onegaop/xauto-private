@@ -1075,8 +1075,8 @@ private struct FlowWrapLayout: Layout {
     var rowSpacing: CGFloat = 8
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let hasBoundedWidth = proposal.width != nil
-        let maxWidth = max(1, proposal.width ?? 1)
+        let fallbackWidth = max(240, UIScreen.main.bounds.width - 32)
+        let maxWidth = max(1, proposal.width ?? fallbackWidth)
         var currentX: CGFloat = 0
         var currentRowHeight: CGFloat = 0
         var totalHeight: CGFloat = 0
@@ -1086,7 +1086,7 @@ private struct FlowWrapLayout: Layout {
             var size = subview.sizeThatFits(.unspecified)
             size.width = min(size.width, maxWidth)
 
-            if hasBoundedWidth, currentX > 0, currentX + size.width > maxWidth {
+            if currentX > 0, currentX + size.width > maxWidth {
                 widestRow = max(widestRow, max(0, currentX - spacing))
                 totalHeight += currentRowHeight + rowSpacing
                 currentX = 0
@@ -1134,6 +1134,8 @@ private struct FlowWrapLayout: Layout {
 }
 
 private struct VerticalOnlyScrollConfigurator: UIViewRepresentable {
+    private static let widthLockIdentifier = "XAutoVerticalWidthLock"
+
     func makeUIView(context: Context) -> UIView {
         let view = UIView(frame: .zero)
         DispatchQueue.main.async {
@@ -1155,10 +1157,21 @@ private struct VerticalOnlyScrollConfigurator: UIViewRepresentable {
                 scrollView.alwaysBounceHorizontal = false
                 scrollView.isDirectionalLockEnabled = true
                 scrollView.showsHorizontalScrollIndicator = false
+                lockContentWidthToFrame(for: scrollView)
                 return
             }
             current = candidate
         }
+    }
+
+    private func lockContentWidthToFrame(for scrollView: UIScrollView) {
+        if scrollView.constraints.contains(where: { $0.identifier == Self.widthLockIdentifier }) {
+            return
+        }
+        let constraint = scrollView.contentLayoutGuide.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor)
+        constraint.identifier = Self.widthLockIdentifier
+        constraint.priority = .required
+        constraint.isActive = true
     }
 }
 
