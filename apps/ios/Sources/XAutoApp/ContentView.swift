@@ -44,31 +44,27 @@ struct TodayView: View {
         NavigationStack {
             ZStack {
                 AppBackground()
-                GeometryReader { proxy in
-                    ScrollView {
-                        VStack(spacing: 16) {
-                            if let message = viewModel.errorMessage {
-                                ErrorCard(message: message)
-                            }
-
-                            weatherSection
-                            digestSection
-                            insightsSection
-                            historySection
-                            itemsSection
+                ScrollView {
+                    VStack(spacing: 16) {
+                        if let message = viewModel.errorMessage {
+                            ErrorCard(message: message)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 12)
-                        .padding(.bottom, 24)
-                        .frame(width: proxy.size.width, alignment: .topLeading)
+
+                        weatherSection
+                        digestSection
+                        insightsSection
+                        historySection
+                        itemsSection
                     }
-                    .scrollBounceBehavior(.basedOnSize, axes: .vertical)
-                    .background(VerticalOnlyScrollConfigurator())
-                    .clipped()
-                    .refreshable {
-                        await viewModel.load()
-                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 24)
+                }
+                .scrollBounceBehavior(.basedOnSize, axes: .vertical)
+                .background(VerticalOnlyScrollConfigurator())
+                .refreshable {
+                    await viewModel.load()
                 }
 
                 if viewModel.isLoading && viewModel.items.isEmpty {
@@ -414,77 +410,73 @@ struct WeekView: View {
         NavigationStack {
             ZStack {
                 AppBackground()
-                GeometryReader { proxy in
-                    ScrollView {
-                        VStack(spacing: 16) {
-                            if let message = viewModel.errorMessage {
-                                ErrorCard(message: message)
-                            }
-
-                            if let digest = viewModel.digest {
-                                DigestHeroCard(digest: digest, title: "Week Digest")
-
-                                if viewModel.hasDigestContent {
-                                    if !digest.topItems.isEmpty {
-                                        GlassCard {
-                                            VStack(alignment: .leading, spacing: 8) {
-                                                SectionTitle(title: "重点条目", subtitle: nil)
-                                                ForEach(digest.topItems) { topItem in
-                                                    NavigationLink {
-                                                        ItemLoaderView(tweetId: topItem.tweetId)
-                                                    } label: {
-                                                        TopItemRow(item: topItem)
-                                                    }
-                                                    .buttonStyle(.plain)
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    if !digest.risks.isEmpty {
-                                        GlassCard {
-                                            VStack(alignment: .leading, spacing: 8) {
-                                                SectionTitle(title: "风险雷达", subtitle: nil)
-                                                ForEach(digest.risks, id: \.self) { risk in
-                                                    Label(risk, systemImage: "exclamationmark.triangle.fill")
-                                                        .font(.subheadline)
-                                                        .foregroundStyle(Color.orange)
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    if !digest.tomorrowActions.isEmpty {
-                                        GlassCard {
-                                            VStack(alignment: .leading, spacing: 8) {
-                                                SectionTitle(title: "行动建议", subtitle: nil)
-                                                ForEach(digest.tomorrowActions, id: \.self) { action in
-                                                    Label(action, systemImage: "checkmark.circle.fill")
-                                                        .font(.subheadline)
-                                                }
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    EmptyStateCard(title: "本周摘要暂无内容", detail: "当前已有周摘要记录，但内容为空。")
-                                }
-                            } else if !viewModel.isLoading {
-                                EmptyStateCard(
-                                    title: "本周摘要还未生成",
-                                    detail: "在 Admin 触发 weekly digest 后，这里会自动展示。"
-                                )
-                            }
+                ScrollView {
+                    VStack(spacing: 16) {
+                        if let message = viewModel.errorMessage {
+                            ErrorCard(message: message)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .frame(width: proxy.size.width, alignment: .topLeading)
+
+                        if let digest = viewModel.digest {
+                            DigestHeroCard(digest: digest, title: "Week Digest")
+
+                            if viewModel.hasDigestContent {
+                                if !digest.topItems.isEmpty {
+                                    GlassCard {
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            SectionTitle(title: "重点条目", subtitle: nil)
+                                            ForEach(digest.topItems) { topItem in
+                                                NavigationLink {
+                                                    ItemLoaderView(tweetId: topItem.tweetId)
+                                                } label: {
+                                                    TopItemRow(item: topItem)
+                                                }
+                                                .buttonStyle(.plain)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if !digest.risks.isEmpty {
+                                    GlassCard {
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            SectionTitle(title: "风险雷达", subtitle: nil)
+                                            ForEach(digest.risks, id: \.self) { risk in
+                                                Label(risk, systemImage: "exclamationmark.triangle.fill")
+                                                    .font(.subheadline)
+                                                    .foregroundStyle(Color.orange)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if !digest.tomorrowActions.isEmpty {
+                                    GlassCard {
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            SectionTitle(title: "行动建议", subtitle: nil)
+                                            ForEach(digest.tomorrowActions, id: \.self) { action in
+                                                Label(action, systemImage: "checkmark.circle.fill")
+                                                    .font(.subheadline)
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                EmptyStateCard(title: "本周摘要暂无内容", detail: "当前已有周摘要记录，但内容为空。")
+                            }
+                        } else if !viewModel.isLoading {
+                            EmptyStateCard(
+                                title: "本周摘要还未生成",
+                                detail: "在 Admin 触发 weekly digest 后，这里会自动展示。"
+                            )
+                        }
                     }
-                    .scrollBounceBehavior(.basedOnSize, axes: .vertical)
-                    .background(VerticalOnlyScrollConfigurator())
-                    .clipped()
-                    .refreshable {
-                        await viewModel.load()
-                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                }
+                .scrollBounceBehavior(.basedOnSize, axes: .vertical)
+                .background(VerticalOnlyScrollConfigurator())
+                .refreshable {
+                    await viewModel.load()
                 }
 
                 if viewModel.isLoading && viewModel.digest == nil {
