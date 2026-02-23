@@ -245,7 +245,15 @@ final class TodayViewModel: ObservableObject {
                 errorMessage: nil
             )
         } catch {
-            return WeatherFetchResult(activity: nil, errorMessage: error.localizedDescription)
+            let friendlyMessage = WeatherActivityService.friendlyErrorMessage(for: error)
+            if let cached = WeatherActivityService.cachedSnapshot() {
+                let narration = await WeatherActivityNarrationService.narrate(from: cached)
+                return WeatherFetchResult(
+                    activity: WeatherActivityCardData(raw: cached, narration: narration),
+                    errorMessage: "已展示最近一次天气数据。\(friendlyMessage)"
+                )
+            }
+            return WeatherFetchResult(activity: nil, errorMessage: friendlyMessage)
         }
     }
 }

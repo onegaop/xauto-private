@@ -36,7 +36,7 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_ENTITLEMENTS: Sources/XAutoApp/XAutoApp.entitlements
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: ""
+        DEVELOPMENT_TEAM: NKTXY2K9WD
     dependencies:
       - package: Atributika
         product: Atributika
@@ -57,4 +57,4 @@ targets:
         INFOPLIST_FILE: Sources/XAutoWidget/Info.plist
         CODE_SIGN_ENTITLEMENTS: Sources/XAutoWidget/XAutoWidget.entitlements
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: ""
+        DEVELOPMENT_TEAM: NKTXY2K9WD

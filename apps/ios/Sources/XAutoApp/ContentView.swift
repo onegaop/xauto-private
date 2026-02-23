@@ -56,6 +56,7 @@ struct TodayView: View {
                         historySection
                         itemsSection
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
                     .padding(.bottom, 24)
@@ -93,17 +94,19 @@ struct TodayView: View {
                 .buttonStyle(.plain)
             }
 
-            if let activity = viewModel.weatherActivity {
-                WeatherActivityCard(activity: activity)
-                if let weatherErrorMessage = viewModel.weatherErrorMessage, !weatherErrorMessage.isEmpty {
-                    Text("最近一次刷新失败：\(weatherErrorMessage)")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            } else if viewModel.isLoadingWeather {
-                GlassCard {
-                    HStack(spacing: 10) {
-                        ProgressView()
+                if let activity = viewModel.weatherActivity {
+                    WeatherActivityCard(activity: activity)
+                    if let weatherErrorMessage = viewModel.weatherErrorMessage, !weatherErrorMessage.isEmpty {
+                        Text("最近一次刷新失败：\(weatherErrorMessage)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } else if viewModel.isLoadingWeather {
+                    GlassCard {
+                        HStack(spacing: 10) {
+                            ProgressView()
                         Text("正在获取天气数据...")
                             .font(.subheadline)
                     }
@@ -493,6 +496,7 @@ struct WeekView: View {
 struct ItemDetailView: View {
     @StateObject private var viewModel: ItemDetailViewModel
     @State private var activeWebURL: URL?
+    @Environment(\.openURL) private var openURL
 
     init(seed: BookmarkItemResponse) {
         _viewModel = StateObject(wrappedValue: ItemDetailViewModel(seed: seed))
@@ -513,14 +517,14 @@ struct ItemDetailView: View {
                         }
 
                         RichPostTextView(text: viewModel.item.text) { tappedURL in
-                            activeWebURL = tappedURL
+                            openURLForDetail(tappedURL)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
 
                         if let url = URL(string: viewModel.item.url), !viewModel.item.url.isEmpty {
                             Button {
-                                activeWebURL = url
+                                openURLForDetail(url)
                             } label: {
                                 Label("Open on X", systemImage: "arrow.up.right.square")
                                     .font(.subheadline.weight(.semibold))
@@ -698,6 +702,61 @@ struct ItemDetailView: View {
                     .ignoresSafeArea()
             }
         }
+    }
+
+    private func openURLForDetail(_ url: URL) {
+        if isXLink(url) {
+            let candidates = preferredXOpenCandidates(for: url)
+            openCandidates(candidates, webFallback: url)
+            return
+        }
+        activeWebURL = url
+    }
+
+    private func openCandidates(_ candidates: [URL], webFallback: URL) {
+        guard let current = candidates.first else {
+            activeWebURL = webFallback
+            return
+        }
+        openURL(current) { accepted in
+            if accepted {
+                return
+            }
+            openCandidates(Array(candidates.dropFirst()), webFallback: webFallback)
+        }
+    }
+
+    private func preferredXOpenCandidates(for url: URL) -> [URL] {
+        var urls: [URL] = []
+        if let tweetID = extractTweetID(from: url) {
+            if let deepTwitter = URL(string: "twitter://status?id=\(tweetID)") {
+                urls.append(deepTwitter)
+            }
+            if let deepX = URL(string: "x://status/\(tweetID)") {
+                urls.append(deepX)
+            }
+        }
+        urls.append(url)
+        return urls
+    }
+
+    private func isXLink(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased() else {
+            return false
+        }
+        return host == "x.com" || host == "www.x.com" || host == "twitter.com" || host == "www.twitter.com"
+    }
+
+    private func extractTweetID(from url: URL) -> String? {
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard let statusIndex = parts.firstIndex(of: "status"), statusIndex + 1 < parts.count else {
+            return nil
+        }
+        let candidate = parts[statusIndex + 1]
+        guard candidate.allSatisfy(\.isNumber) else {
+            return nil
+        }
+        return candidate
     }
 }
 
@@ -1019,10 +1078,15 @@ private struct ErrorCard: View {
 
     var body: some View {
         GlassCard {
-            Label(message, systemImage: "exclamationmark.triangle.fill")
-                .font(.footnote)
-                .foregroundStyle(Color.red)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Color.red)
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(Color.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -1033,7 +1097,19 @@ private struct EmptyStateCard: View {
 
     var body: some View {
         GlassCard {
-            ContentUnavailableView(title, systemImage: "tray", description: Text(detail))
+            VStack(spacing: 10) {
+                Image(systemName: "tray")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                Text(title)
+                    .font(.headline)
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity)
         }
     }
 }

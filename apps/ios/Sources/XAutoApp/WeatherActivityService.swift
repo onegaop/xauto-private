@@ -21,20 +21,81 @@ struct WeatherActivityCardData {
     let narration: WeatherActivityNarration
 }
 
+private struct WeatherSnapshotCacheRecord: Codable {
+    let locationName: String
+    let symbolName: String
+    let conditionText: String
+    let temperatureC: Int
+    let observationDate: Date
+}
+
 enum WeatherActivityService {
+    private static let cacheKey = "xauto.weather.latestSnapshot"
+
     static func fetchCurrentWeather() async throws -> WeatherRawSnapshot {
         let location = try await DeviceLocationProvider.shared.requestCurrentLocation()
         let weather = try await WeatherService.shared.weather(for: location)
         let current = weather.currentWeather
         let locationName = await resolveLocationName(for: location)
 
-        return WeatherRawSnapshot(
+        let snapshot = WeatherRawSnapshot(
             locationName: locationName,
             symbolName: current.symbolName,
             conditionText: localizedConditionName(from: current.condition),
             temperatureC: Int(current.temperature.converted(to: .celsius).value.rounded()),
             observationDate: current.date
         )
+        cache(snapshot)
+        return snapshot
+    }
+
+    static func cachedSnapshot() -> WeatherRawSnapshot? {
+        guard let data = UserDefaults.standard.data(forKey: cacheKey) else {
+            return nil
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let record = try? decoder.decode(WeatherSnapshotCacheRecord.self, from: data) else {
+            return nil
+        }
+        return WeatherRawSnapshot(
+            locationName: record.locationName,
+            symbolName: record.symbolName,
+            conditionText: record.conditionText,
+            temperatureC: record.temperatureC,
+            observationDate: record.observationDate
+        )
+    }
+
+    static func friendlyErrorMessage(for error: Error) -> String {
+        if let locationError = error as? DeviceLocationError {
+            return locationError.localizedDescription
+        }
+
+        let lowercased = "\(error.localizedDescription) \((error as NSError).domain)".lowercased()
+        if lowercased.contains("weatherdaemon") || lowercased.contains("wdsjwt") || lowercased.contains("authenticator") {
+            return "WeatherKit 当前暂不可用（系统天气服务鉴权失败）。请在真机联网后重试，模拟器中也可能偶发此错误。"
+        }
+        if lowercased.contains("network") || lowercased.contains("offline") || lowercased.contains("timed out") {
+            return "网络不稳定，天气数据拉取失败，请稍后重试。"
+        }
+
+        return "天气服务暂不可用，请稍后重试。"
+    }
+
+    private static func cache(_ snapshot: WeatherRawSnapshot) {
+        let record = WeatherSnapshotCacheRecord(
+            locationName: snapshot.locationName,
+            symbolName: snapshot.symbolName,
+            conditionText: snapshot.conditionText,
+            temperatureC: snapshot.temperatureC,
+            observationDate: snapshot.observationDate
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        if let encoded = try? encoder.encode(record) {
+            UserDefaults.standard.set(encoded, forKey: cacheKey)
+        }
     }
 
     private static func resolveLocationName(for location: CLLocation) async -> String {
