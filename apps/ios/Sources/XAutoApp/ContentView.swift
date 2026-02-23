@@ -10,6 +10,11 @@ final class AppNavigationState: ObservableObject {
     @Published var selectedTab: AppTab = .today
 }
 
+private struct TweetRoute: Hashable, Identifiable {
+    let tweetId: String
+    var id: String { tweetId }
+}
+
 struct ContentView: View {
     @Binding var selectedTab: AppTab
 
@@ -39,6 +44,7 @@ struct ContentView: View {
 
 struct TodayView: View {
     @StateObject private var viewModel = TodayViewModel()
+    @State private var selectedTweetRoute: TweetRoute?
 
     var body: some View {
         NavigationStack {
@@ -77,6 +83,9 @@ struct TodayView: View {
             .navigationTitle("XAuto")
             .task {
                 await viewModel.load()
+            }
+            .navigationDestination(item: $selectedTweetRoute) { route in
+                ItemLoaderView(tweetId: route.tweetId)
             }
         }
     }
@@ -136,8 +145,8 @@ struct TodayView: View {
                         VStack(alignment: .leading, spacing: 10) {
                             SectionTitle(title: "重点条目", subtitle: nil)
                             ForEach(viewModel.featuredItems) { topItem in
-                                NavigationLink {
-                                    ItemLoaderView(tweetId: topItem.tweetId)
+                                Button {
+                                    selectedTweetRoute = TweetRoute(tweetId: topItem.tweetId)
                                 } label: {
                                     TopItemRow(item: topItem)
                                 }
@@ -261,8 +270,8 @@ struct TodayView: View {
 
                             if !digest.topItems.isEmpty {
                                 ForEach(digest.topItems.prefix(2)) { topItem in
-                                    NavigationLink {
-                                        ItemLoaderView(tweetId: topItem.tweetId)
+                                    Button {
+                                        selectedTweetRoute = TweetRoute(tweetId: topItem.tweetId)
                                     } label: {
                                         TopItemRow(item: topItem)
                                     }
@@ -366,8 +375,8 @@ struct TodayView: View {
                 EmptyStateCard(title: "暂无条目", detail: "试试放宽筛选条件或先同步书签。")
             } else {
                 ForEach(viewModel.items) { item in
-                    NavigationLink {
-                        ItemDetailView(seed: item)
+                    Button {
+                        selectedTweetRoute = TweetRoute(tweetId: item.tweetId)
                     } label: {
                         BookmarkRow(item: item)
                     }
@@ -408,6 +417,7 @@ struct TodayView: View {
 
 struct WeekView: View {
     @StateObject private var viewModel = WeekViewModel()
+    @State private var selectedTweetRoute: TweetRoute?
 
     var body: some View {
         NavigationStack {
@@ -428,8 +438,8 @@ struct WeekView: View {
                                         VStack(alignment: .leading, spacing: 8) {
                                             SectionTitle(title: "重点条目", subtitle: nil)
                                             ForEach(digest.topItems) { topItem in
-                                                NavigationLink {
-                                                    ItemLoaderView(tweetId: topItem.tweetId)
+                                                Button {
+                                                    selectedTweetRoute = TweetRoute(tweetId: topItem.tweetId)
                                                 } label: {
                                                     TopItemRow(item: topItem)
                                                 }
@@ -492,6 +502,9 @@ struct WeekView: View {
             .navigationTitle("Week")
             .task {
                 await viewModel.load()
+            }
+            .navigationDestination(item: $selectedTweetRoute) { route in
+                ItemLoaderView(tweetId: route.tweetId)
             }
         }
     }
