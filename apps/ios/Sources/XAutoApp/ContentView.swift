@@ -2299,202 +2299,222 @@ private struct VocabularyInsightSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: DS.lg) {
+                VStack(alignment: .leading, spacing: 24) {
                     if state.isLoading {
-                        VStack(spacing: DS.md) {
+                        VStack(spacing: 16) {
                             ProgressView()
-                                .scaleEffect(1.2)
+                                .controlSize(.large)
                             Text("正在通过 AI 深度解析语境...")
-                                .font(.subheadline)
+                                .font(.system(.subheadline, design: .rounded))
                                 .foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 40)
+                        .padding(.vertical, 60)
                     } else if let card = state.card {
-                        VStack(alignment: .leading, spacing: DS.xl) {
-                            // Header Section
-                            VStack(alignment: .leading, spacing: DS.xs) {
+                        VStack(alignment: .leading, spacing: 28) {
+                            // Header Section: Term & Phonetic
+                            VStack(alignment: .leading, spacing: 12) {
                                 HStack(alignment: .firstTextBaseline) {
                                     Text(card.term.isEmpty ? state.term : card.term)
-                                        .font(.system(.title, design: .rounded).weight(.bold))
+                                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                                        .tracking(-0.5)
                                     
                                     Spacer()
                                     
                                     if card.confidence > 0 {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "sparkles")
-                                                .font(.caption2)
-                                            Text("\(Int((card.confidence * 100).rounded()))%")
-                                                .font(.system(.caption, design: .monospaced).weight(.bold))
-                                        }
-                                        .foregroundStyle(.orange)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.orange.opacity(0.1), in: Capsule())
+                                        Text("\(Int((card.confidence * 100).rounded()))%")
+                                            .font(.system(.caption, design: .monospaced).weight(.bold))
+                                            .foregroundStyle(.orange)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(Color.orange.opacity(0.1), in: Capsule())
                                     }
                                 }
                                 
-                                if !card.phonetic.ipa.isEmpty || !card.phonetic.us.isEmpty || !card.phonetic.uk.isEmpty {
-                                    HStack(spacing: DS.md) {
-                                        if !card.phonetic.ipa.isEmpty {
-                                            Text("/\(card.phonetic.ipa)/")
-                                                .font(.subheadline.monospaced())
-                                                .foregroundStyle(.secondary)
+                                HStack(spacing: 16) {
+                                    if !card.phonetic.ipa.isEmpty {
+                                        Text("/\(card.phonetic.ipa)/")
+                                            .font(.system(.body, design: .monospaced))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    
+                                    if !card.phonetic.us.isEmpty {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "speaker.wave.2.fill")
+                                                .font(.caption2)
+                                            Text(card.phonetic.us)
+                                                .font(.system(.caption, design: .rounded).weight(.medium))
                                         }
-                                        
-                                        HStack(spacing: DS.xs) {
-                                            if !card.phonetic.us.isEmpty {
-                                                Label(card.phonetic.us, systemImage: "speaker.wave.2")
-                                                    .font(.caption2)
-                                                    .foregroundStyle(.secondary)
-                                            }
-                                        }
+                                        .foregroundStyle(.secondary)
                                     }
                                 }
                                 
                                 if !card.partOfSpeech.isEmpty {
-                                    HStack(spacing: DS.xs) {
+                                    HStack(spacing: 6) {
                                         ForEach(card.partOfSpeech, id: \.self) { pos in
                                             Text(pos)
-                                                .font(.caption2.weight(.bold))
-                                                .padding(.horizontal, 6)
-                                                .padding(.vertical, 2)
-                                                .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 4))
+                                                .font(.system(size: 11, weight: .heavy, design: .rounded))
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
                                                 .foregroundStyle(.secondary)
                                         }
                                     }
-                                    .padding(.top, 4)
                                 }
                             }
 
-                            // Definition Section
-                            VStack(alignment: .leading, spacing: DS.sm) {
+                            // Definition Section: High contrast
+                            VStack(alignment: .leading, spacing: 12) {
                                 Text(card.translation)
-                                    .font(.title3.weight(.bold))
+                                    .font(.system(.title3, design: .rounded).weight(.bold))
                                     .foregroundStyle(.primary)
                                 
                                 if !card.shortDefinitionZh.isEmpty {
                                     Text(card.shortDefinitionZh)
-                                        .font(.body)
-                                        .lineSpacing(4)
-                                }
-                                
-                                if !card.shortDefinitionEn.isEmpty {
-                                    Text(card.shortDefinitionEn)
-                                        .font(.subheadline)
+                                        .font(.system(.body, design: .rounded))
+                                        .lineSpacing(6)
                                         .foregroundStyle(.secondary)
-                                        .italic()
                                 }
                             }
-                            .padding(DS.md)
+                            .padding(20)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 16))
+                            .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
 
-                            // Context Example
-                            VStack(alignment: .leading, spacing: DS.sm) {
-                                Label("语境例句", systemImage: "quote.opening")
-                                    .font(.headline)
+                            // Context Example: Apple News Style
+                            VStack(alignment: .leading, spacing: 14) {
+                                Label("语境例句", systemImage: "sparkles")
+                                    .font(.system(.subheadline, design: .rounded).weight(.bold))
                                     .foregroundStyle(.orange)
                                 
-                                VStack(alignment: .leading, spacing: DS.xs) {
+                                VStack(alignment: .leading, spacing: 10) {
                                     Text(card.example.source)
-                                        .font(.subheadline.weight(.medium))
+                                        .font(.system(.subheadline, design: .rounded).weight(.medium))
+                                        .lineSpacing(4)
                                         .fixedSize(horizontal: false, vertical: true)
                                     
                                     Text(card.example.target)
-                                        .font(.footnote)
+                                        .font(.system(.footnote, design: .rounded))
                                         .foregroundStyle(.secondary)
                                 }
-                                .padding(.leading, DS.sm)
-                                .padding(.vertical, DS.xs)
-                                .border(width: 2, edges: [.leading], color: .orange.opacity(0.3))
+                                .padding(.leading, 16)
+                                .overlay(
+                                    Rectangle()
+                                        .fill(Color.orange.opacity(0.3))
+                                        .frame(width: 3)
+                                        .padding(.vertical, 2),
+                                    alignment: .leading
+                                )
                             }
 
+                            // Collocations: Grid-like density
                             if !card.collocations.isEmpty {
-                                VStack(alignment: .leading, spacing: DS.sm) {
+                                VStack(alignment: .leading, spacing: 14) {
                                     Label("常见搭配", systemImage: "link")
-                                        .font(.headline)
+                                        .font(.system(.subheadline, design: .rounded).weight(.bold))
                                     
-                                    FlowLayout(spacing: DS.sm) {
+                                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                                         ForEach(card.collocations) { item in
-                                            VStack(alignment: .leading, spacing: 2) {
+                                            VStack(alignment: .leading, spacing: 4) {
                                                 Text(item.text)
-                                                    .font(.subheadline.weight(.semibold))
+                                                    .font(.system(.footnote, design: .rounded).weight(.bold))
                                                 Text(item.translation)
-                                                    .font(.caption2)
+                                                    .font(.system(size: 10, design: .rounded))
                                                     .foregroundStyle(.secondary)
                                             }
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 8)
-                                            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+                                            .padding(12)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
                                         }
                                     }
                                 }
                             }
 
+                            // Confusable: Alert Style
                             if !card.confusable.isEmpty {
-                                VStack(alignment: .leading, spacing: DS.sm) {
-                                    Label("易混辨析", systemImage: "arrow.left.and.right.circle")
-                                        .font(.headline)
+                                VStack(alignment: .leading, spacing: 14) {
+                                    Label("易混辨析", systemImage: "questionmark.circle.fill")
+                                        .font(.system(.subheadline, design: .rounded).weight(.bold))
                                     
                                     ForEach(card.confusable) { item in
-                                        HStack(alignment: .top, spacing: DS.sm) {
-                                            VStack(alignment: .leading, spacing: 2) {
+                                        HStack(alignment: .top, spacing: 12) {
+                                            Image(systemName: "exclamationmark.circle.fill")
+                                                .font(.footnote)
+                                                .foregroundStyle(.orange)
+                                                .padding(.top, 2)
+                                            
+                                            VStack(alignment: .leading, spacing: 4) {
                                                 Text(item.word)
-                                                    .font(.subheadline.weight(.bold))
-                                                    .foregroundStyle(.orange)
+                                                    .font(.system(.footnote, design: .rounded).weight(.bold))
                                                 Text(item.diff)
-                                                    .font(.footnote)
+                                                    .font(.system(.caption, design: .rounded))
                                                     .foregroundStyle(.secondary)
+                                                    .lineSpacing(2)
                                             }
                                         }
-                                        .padding(DS.sm)
+                                        .padding(16)
                                         .frame(maxWidth: .infinity, alignment: .leading)
-                                        .background(Color.orange.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+                                        .background(Color.orange.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
                                     }
                                 }
                             }
                             
-                            // Footer Info
+                            // Footer: Minimalist
                             HStack {
-                                Label(state.fromCache ? "已缓存" : "AI 生成", systemImage: state.fromCache ? "archivebox" : "sparkles")
+                                Label(state.fromCache ? "已缓存" : "AI 实时生成", systemImage: state.fromCache ? "clock.fill" : "sparkles")
                                 Spacer()
                                 Text("\(card.provider) · \(card.model)")
                             }
-                            .font(.caption2)
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
                             .foregroundStyle(.tertiary)
-                            .padding(.top, DS.md)
+                            .padding(.top, 12)
                         }
                     }
 
                     if let errorMessage = state.errorMessage, !errorMessage.isEmpty {
-                        VStack(spacing: DS.md) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.largeTitle)
+                        VStack(spacing: 24) {
+                            Spacer()
+                            Image(systemName: "wifi.exclamationmark")
+                                .font(.system(size: 48, weight: .light))
                                 .foregroundStyle(.orange)
-                            Text(errorMessage)
-                                .font(.subheadline)
-                                .multilineTextAlignment(.center)
-                            Button("重试") { onRetry() }
-                                .buttonStyle(.bordered)
+                            
+                            VStack(spacing: 8) {
+                                Text("解析失败")
+                                    .font(.system(.headline, design: .rounded))
+                                
+                                Text(errorMessage)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .multilineTextAlignment(.center)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 32)
+                            }
+                            
+                            Button(action: onRetry) {
+                                Text("重试")
+                                    .font(.system(.subheadline, design: .rounded).weight(.bold))
+                                    .padding(.horizontal, 32)
+                                    .padding(.vertical, 10)
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.orange)
+                            
+                            Spacer()
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 40)
+                        .frame(maxWidth: .infinity, minHeight: 300)
+                        .padding(.bottom, 40)
                     }
                 }
-                .padding(.horizontal, DS.pageH)
-                .padding(.top, DS.md)
-                .padding(.bottom, 100) // Space for bottom buttons
+                .padding(.horizontal, 24)
+                .padding(.top, 20)
+                .padding(.bottom, 120)
             }
-            .background(AppBackground())
+            .background(Color(.systemBackground))
             .navigationTitle("词境解析")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        onCopy()
-                    } label: {
+                    Button(action: onCopy) {
                         Image(systemName: "doc.on.doc")
+                            .font(.system(size: 14, weight: .medium))
                     }
                     .disabled(state.card == nil)
                 }
@@ -2502,31 +2522,30 @@ private struct VocabularyInsightSheet: View {
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 0) {
                     Divider()
-                    HStack(spacing: DS.md) {
-                        Button {
-                            onOpenSystemDictionary()
-                        } label: {
-                            Label("系统词典", systemImage: "book")
-                                .font(.subheadline.weight(.medium))
+                    HStack(spacing: 16) {
+                        Button(action: onOpenSystemDictionary) {
+                            Label("系统词典", systemImage: "book.fill")
+                                .font(.system(.subheadline, design: .rounded).weight(.bold))
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
+                                .padding(.vertical, 16)
                         }
                         .buttonStyle(.bordered)
                         .tint(.primary)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
 
-                        Button {
-                            onRetry()
-                        } label: {
-                            Label("重新解析", systemImage: "sparkles")
-                                .font(.subheadline.weight(.bold))
+                        Button(action: onRetry) {
+                            Label("重新解析", systemImage: "arrow.clockwise.heart.fill")
+                                .font(.system(.subheadline, design: .rounded).weight(.bold))
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
+                                .padding(.vertical, 16)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.orange)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
                     }
-                    .padding(.horizontal, DS.pageH)
-                    .padding(.vertical, DS.md)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 16)
+                    .padding(.bottom, 32)
                     .background(.ultraThinMaterial)
                 }
             }

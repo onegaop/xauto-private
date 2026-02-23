@@ -212,10 +212,10 @@ struct RichPostTextView: UIViewRepresentable {
                 range: range,
                 url: dictionaryURL,
                 color: .systemOrange,
-                backgroundColor: UIColor.systemOrange.withAlphaComponent(0.12)
+                backgroundColor: UIColor.systemOrange.withAlphaComponent(0.1)
             )
-            attributed.addAttribute(.underlineStyle, value: 0, range: range)
-            attributed.addAttribute(.underlineColor, value: UIColor.clear, range: range)
+            attributed.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+            attributed.addAttribute(.underlineColor, value: UIColor.systemOrange.withAlphaComponent(0.3), range: range)
             // Add a custom attribute to identify vocabulary links for special rendering if needed
             attributed.addAttribute(NSAttributedString.Key("XAutoVocabularyTerm"), value: term, range: range)
             occupiedRanges.append(range)
