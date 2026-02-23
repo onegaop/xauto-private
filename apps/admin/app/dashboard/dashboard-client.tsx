@@ -43,7 +43,7 @@ type SyncSettings = {
   nextRunAt: string | null;
 };
 
-type JobName = 'sync' | 'digest_daily' | 'digest_weekly';
+type JobName = 'sync' | 'digest_daily' | 'digest_weekly' | 'resummarize';
 
 type JobInvokeLog = {
   id: string;
@@ -87,7 +87,8 @@ const PROVIDER_PRESET: Record<
 const DEFAULT_JOB_PAYLOAD: Record<JobName, string> = {
   sync: '{\n  \"force\": true\n}',
   digest_daily: '{}',
-  digest_weekly: '{}'
+  digest_weekly: '{}',
+  resummarize: '{\n  \"limit\": 50,\n  \"overwrite\": true\n}'
 };
 
 const tryParseJsonObject = (input: string): { value: Record<string, unknown> | null; error: string | null } => {
@@ -530,6 +531,14 @@ export default function DashboardClient(): JSX.Element {
             </button>
             <button
               type="button"
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              disabled={runningJob !== null}
+              onClick={() => void runJob('resummarize')}
+            >
+              {runningJob === 'resummarize' ? '执行中...' : '刷新历史摘要'}
+            </button>
+            <button
+              type="button"
               className={`${styles.btn} ${styles.btnSecondary}`}
               disabled={runningJob !== null}
               onClick={() => void loadData()}
@@ -545,7 +554,7 @@ export default function DashboardClient(): JSX.Element {
             </div>
 
             <div className={styles.jobTabs}>
-              {(['sync', 'digest_daily', 'digest_weekly'] as JobName[]).map((jobName) => (
+              {(['sync', 'digest_daily', 'digest_weekly', 'resummarize'] as JobName[]).map((jobName) => (
                 <button
                   key={jobName}
                   type="button"

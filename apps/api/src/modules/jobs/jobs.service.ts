@@ -55,6 +55,25 @@ export class JobsService {
     return this.executeJob('digest_weekly', async () => this.digestService.generateWeeklyDigest());
   }
 
+  async triggerResummarize(payload?: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const limitRaw = Number(payload?.limit ?? 50);
+    const limit = Number.isFinite(limitRaw) ? Math.min(500, Math.max(1, Math.floor(limitRaw))) : 50;
+    const overwrite = typeof payload?.overwrite === 'boolean' ? payload.overwrite : true;
+    const sinceSyncedAt = typeof payload?.sinceSyncedAt === 'string' ? payload.sinceSyncedAt : undefined;
+    const tweetIds = Array.isArray(payload?.tweetIds)
+      ? payload.tweetIds.map((item) => String(item)).filter(Boolean).slice(0, 500)
+      : undefined;
+
+    return this.executeJob('resummarize', async () =>
+      this.syncService.rerunSummaries({
+        limit,
+        overwrite,
+        sinceSyncedAt,
+        tweetIds
+      })
+    );
+  }
+
   async listRuns(limit = 30): Promise<JobRunDocument[]> {
     return this.jobRunModel.find().sort({ startedAt: -1 }).limit(Math.min(100, Math.max(1, limit)));
   }

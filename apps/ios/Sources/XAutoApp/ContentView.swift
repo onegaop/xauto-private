@@ -1284,8 +1284,121 @@ private struct MarkdownTextBlock: View {
             .markdownTextStyle {
                 FontSize(.em(0.95))
             }
+            .markdownBlockStyle(\.heading1) { configuration in
+                configuration.label
+                    .relativeLineSpacing(.em(0.12))
+                    .markdownMargin(top: 14, bottom: 10)
+                    .markdownTextStyle {
+                        FontWeight(.semibold)
+                        FontSize(.em(1.45))
+                    }
+            }
+            .markdownBlockStyle(\.heading2) { configuration in
+                configuration.label
+                    .relativeLineSpacing(.em(0.12))
+                    .markdownMargin(top: 12, bottom: 8)
+                    .markdownTextStyle {
+                        FontWeight(.semibold)
+                        FontSize(.em(1.3))
+                    }
+            }
+            .markdownBlockStyle(\.heading3) { configuration in
+                configuration.label
+                    .relativeLineSpacing(.em(0.12))
+                    .markdownMargin(top: 10, bottom: 8)
+                    .markdownTextStyle {
+                        FontWeight(.semibold)
+                        FontSize(.em(1.16))
+                    }
+            }
+            .markdownBlockStyle(\.heading4) { configuration in
+                configuration.label
+                    .relativeLineSpacing(.em(0.1))
+                    .markdownMargin(top: 8, bottom: 6)
+                    .markdownTextStyle {
+                        FontWeight(.semibold)
+                    }
+            }
+            .markdownBlockStyle(\.heading5) { configuration in
+                configuration.label
+                    .relativeLineSpacing(.em(0.1))
+                    .markdownMargin(top: 8, bottom: 6)
+                    .markdownTextStyle {
+                        FontWeight(.semibold)
+                        FontSize(.em(0.9))
+                    }
+            }
+            .markdownBlockStyle(\.heading6) { configuration in
+                configuration.label
+                    .relativeLineSpacing(.em(0.1))
+                    .markdownMargin(top: 8, bottom: 6)
+                    .markdownTextStyle {
+                        FontWeight(.semibold)
+                        FontSize(.em(0.85))
+                        ForegroundColor(.secondary)
+                    }
+            }
+            .markdownBlockStyle(\.blockquote) { configuration in
+                HStack(spacing: 0) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.orange.opacity(0.75))
+                        .frame(width: 3)
+                    configuration.label
+                        .markdownTextStyle {
+                            ForegroundColor(.secondary)
+                        }
+                        .padding(.leading, 12)
+                        .padding(.vertical, 10)
+                }
+                .padding(.trailing, 12)
+                .background(
+                    Color.orange.opacity(0.08),
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                )
+                .markdownMargin(top: 2, bottom: 12)
+            }
+            .markdownBlockStyle(\.codeBlock) { configuration in
+                VStack(spacing: 0) {
+                    HStack {
+                        Text(codeLanguageLabel(configuration.language))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.primary.opacity(0.04))
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        configuration.label
+                            .fixedSize(horizontal: false, vertical: true)
+                            .relativeLineSpacing(.em(0.2))
+                            .markdownTextStyle {
+                                FontFamilyVariant(.monospaced)
+                                FontSize(.em(0.84))
+                            }
+                            .padding(12)
+                    }
+                }
+                .background(Color(.tertiarySystemGroupedBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                )
+                .markdownMargin(top: 0, bottom: 12)
+            }
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func codeLanguageLabel(_ rawLanguage: String?) -> String {
+        guard let rawLanguage,
+              !rawLanguage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return "CODE"
+        }
+        return rawLanguage.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
     }
 }
 

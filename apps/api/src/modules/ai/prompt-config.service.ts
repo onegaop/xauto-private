@@ -10,22 +10,29 @@ const MINI_MARKDOWN_PROMPT_KEY = 'prompt:mini_markdown_system';
 
 const DEFAULT_MINI_PROMPT = `你是技术分析师。
 
-请对下面这条 X post 做“拆解式理解”，并输出为严格 JSON（不要输出 markdown）：
+请拆解这条 X post，中文输出、简洁，严格返回 JSON object（不要 markdown）：
 
-1. 核心观点（一句话）
-2. 背后的底层问题是什么？
-3. 涉及哪些关键技术或概念？分别在解决什么？
-4. 这是事实、观点还是推测？标注清楚。
-5. 如果我想深入研究，给 3 个英文关键词。
+1. 提取事实 vs 观点
+2. 给出逻辑结构
+3. 列出隐含假设
+4. 提供反方视角
+5. 总结可复用洞察（<=3条）
+6. 如果有涉及的 GitHub 开源库，列出名字和链接
 
-JSON 必须包含以下字段：
+建议字段（用于上述 1-6）：
+- fact_vs_opinion: { facts: [], opinions: [], speculations: [] }
+- logic_structure: []
+- hidden_assumptions: []
+- counter_views: []
+- reusable_insights: []
+- github_libraries: [{ name, url }]
+
+兼容字段（必须同时提供，保证前端稳定）：
 - core_viewpoint
 - underlying_problem
 - key_technologies: [{ concept, solves }]
 - claim_types: [{ statement, label }]，label 只能是 fact / opinion / speculation
 - research_keywords_en: [string, string, string]
-
-兼容字段（必须同时提供）：
 - one_liner_zh
 - one_liner_en
 - bullets_zh
@@ -36,7 +43,7 @@ JSON 必须包含以下字段：
 - quality_score
 
 要求：
-- 中英双语信息尽量完整。
+- 中英双语信息尽量完整（若英文不足，可简短补齐）。
 - quality_score 为 0 到 1 的数字。
 - 严格返回 JSON object。`;
 

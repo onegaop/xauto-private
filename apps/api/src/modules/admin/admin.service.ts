@@ -84,6 +84,10 @@ export class AdminService {
       return this.jobsService.triggerWeeklyDigest();
     }
 
+    if (name === 'resummarize') {
+      return this.jobsService.triggerResummarize(payload);
+    }
+
     throw new Error(`Unsupported job: ${name}`);
   }
 

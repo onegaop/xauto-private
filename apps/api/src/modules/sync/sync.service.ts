@@ -5,7 +5,7 @@ import { BookmarkItem, BookmarkItemDocument } from '../../database/schemas/bookm
 import { ItemSummary, ItemSummaryDocument } from '../../database/schemas/item-summary.schema';
 import { SyncState, SyncStateDocument } from '../../database/schemas/sync-state.schema';
 import { AuthXService } from '../auth-x/auth-x.service';
-import { AiService } from '../ai/ai.service';
+import { AiService, SummaryResult } from '../ai/ai.service';
 import { XApiService, XTweetDetailItem } from './x-api.service';
 
 @Injectable()
@@ -162,33 +162,7 @@ export class SyncService {
           text
         });
 
-        await this.itemSummaryModel.updateOne(
-          { tweetId: item.tweetId, version: 1 },
-          {
-            $set: {
-              tweetId: item.tweetId,
-              version: 1,
-              oneLinerZh: summary.oneLinerZh,
-              oneLinerEn: summary.oneLinerEn,
-              bulletsZh: summary.bulletsZh,
-              bulletsEn: summary.bulletsEn,
-              tagsZh: summary.tagsZh,
-              tagsEn: summary.tagsEn,
-              actions: summary.actions,
-              renderMarkdown: summary.renderMarkdown,
-              coreViewpoint: summary.coreViewpoint,
-              underlyingProblem: summary.underlyingProblem,
-              keyTechnologies: summary.keyTechnologies,
-              claimTypes: summary.claimTypes,
-              researchKeywordsEn: summary.researchKeywordsEn,
-              qualityScore: summary.qualityScore,
-              provider: summary.provider,
-              model: summary.model,
-              summarizedAt: new Date()
-            }
-          },
-          { upsert: true }
-        );
+        await this.upsertSummary(item.tweetId, summary);
       }
 
       if (!nextToken) {
@@ -207,5 +181,137 @@ export class SyncService {
       stoppedOnFirstNoNewPage,
       existingCountOnLastPage
     };
+  }
+
+  async rerunSummaries(options?: {
+    limit?: number;
+    overwrite?: boolean;
+    tweetIds?: string[];
+    sinceSyncedAt?: string;
+  }): Promise<Record<string, unknown>> {
+    const limitRaw = Number(options?.limit ?? 50);
+    const limit = Number.isFinite(limitRaw) ? Math.min(500, Math.max(1, Math.floor(limitRaw))) : 50;
+    const overwrite = options?.overwrite !== false;
+    const tweetIds = Array.isArray(options?.tweetIds)
+      ? options.tweetIds.map((item) => String(item).trim()).filter(Boolean).slice(0, 500)
+      : [];
+
+    const filter: Record<string, unknown> = {
+      text: { $exists: true, $ne: '' }
+    };
+
+    if (tweetIds.length > 0) {
+      filter.tweetId = { $in: tweetIds };
+    }
+
+    const sinceSyncedAt = typeof options?.sinceSyncedAt === 'string' ? options.sinceSyncedAt.trim() : '';
+    if (sinceSyncedAt) {
+      const date = new Date(sinceSyncedAt);
+      if (!Number.isNaN(date.getTime())) {
+        filter.syncedAt = { $gte: date };
+      }
+    }
+
+    const items = await this.bookmarkItemModel
+      .find(filter)
+      .sort({ syncedAt: -1, _id: -1 })
+      .limit(limit)
+      .lean();
+
+    const existingSet = new Set<string>();
+    if (!overwrite && items.length > 0) {
+      const existing = await this.itemSummaryModel
+        .find({
+          tweetId: { $in: items.map((item) => item.tweetId) },
+          version: 1
+        })
+        .select('tweetId')
+        .lean();
+      for (const row of existing) {
+        existingSet.add(row.tweetId);
+      }
+    }
+
+    let processed = 0;
+    let updated = 0;
+    let skippedNoText = 0;
+    let skippedExisting = 0;
+    let failed = 0;
+    const errors: Array<{ tweetId: string; error: string }> = [];
+
+    for (const item of items) {
+      const text = item.text?.trim();
+      if (!text) {
+        skippedNoText += 1;
+        continue;
+      }
+
+      if (!overwrite && existingSet.has(item.tweetId)) {
+        skippedExisting += 1;
+        continue;
+      }
+
+      processed += 1;
+
+      try {
+        const summary = await this.aiService.generateMiniSummary({
+          tweetId: item.tweetId,
+          text
+        });
+        await this.upsertSummary(item.tweetId, summary);
+        updated += 1;
+      } catch (error) {
+        failed += 1;
+        if (errors.length < 20) {
+          errors.push({
+            tweetId: item.tweetId,
+            error: error instanceof Error ? error.message : String(error)
+          });
+        }
+      }
+    }
+
+    return {
+      requestedLimit: limit,
+      selected: items.length,
+      processed,
+      updated,
+      skippedNoText,
+      skippedExisting,
+      failed,
+      overwrite,
+      sinceSyncedAt: sinceSyncedAt || null,
+      errors
+    };
+  }
+
+  private async upsertSummary(tweetId: string, summary: SummaryResult): Promise<void> {
+    await this.itemSummaryModel.updateOne(
+      { tweetId, version: 1 },
+      {
+        $set: {
+          tweetId,
+          version: 1,
+          oneLinerZh: summary.oneLinerZh,
+          oneLinerEn: summary.oneLinerEn,
+          bulletsZh: summary.bulletsZh,
+          bulletsEn: summary.bulletsEn,
+          tagsZh: summary.tagsZh,
+          tagsEn: summary.tagsEn,
+          actions: summary.actions,
+          renderMarkdown: summary.renderMarkdown,
+          coreViewpoint: summary.coreViewpoint,
+          underlyingProblem: summary.underlyingProblem,
+          keyTechnologies: summary.keyTechnologies,
+          claimTypes: summary.claimTypes,
+          researchKeywordsEn: summary.researchKeywordsEn,
+          qualityScore: summary.qualityScore,
+          provider: summary.provider,
+          model: summary.model,
+          summarizedAt: new Date()
+        }
+      },
+      { upsert: true }
+    );
   }
 }
