@@ -44,7 +44,7 @@ struct TodayView: View {
         NavigationStack {
             ZStack {
                 AppBackground()
-                ScrollView {
+                List {
                     VStack(spacing: 16) {
                         if let message = viewModel.errorMessage {
                             ErrorCard(message: message)
@@ -60,9 +60,12 @@ struct TodayView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
                     .padding(.bottom, 24)
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
                 }
-                .scrollBounceBehavior(.basedOnSize, axes: .vertical)
-                .background(VerticalOnlyScrollConfigurator())
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
                 .refreshable {
                     await viewModel.load()
                 }
@@ -410,7 +413,7 @@ struct WeekView: View {
         NavigationStack {
             ZStack {
                 AppBackground()
-                ScrollView {
+                List {
                     VStack(spacing: 16) {
                         if let message = viewModel.errorMessage {
                             ErrorCard(message: message)
@@ -472,9 +475,12 @@ struct WeekView: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
                 }
-                .scrollBounceBehavior(.basedOnSize, axes: .vertical)
-                .background(VerticalOnlyScrollConfigurator())
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
                 .refreshable {
                     await viewModel.load()
                 }
@@ -1130,48 +1136,6 @@ private struct FlowWrapLayout: Layout {
             cursorX += size.width + spacing
             currentRowHeight = max(currentRowHeight, size.height)
         }
-    }
-}
-
-private struct VerticalOnlyScrollConfigurator: UIViewRepresentable {
-    private static let widthLockIdentifier = "XAutoVerticalWidthLock"
-
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: .zero)
-        DispatchQueue.main.async {
-            configureScrollView(from: view)
-        }
-        return view
-    }
-
-    func updateUIView(_ uiView: UIView, context: Context) {
-        DispatchQueue.main.async {
-            configureScrollView(from: uiView)
-        }
-    }
-
-    private func configureScrollView(from view: UIView) {
-        var current: UIView? = view
-        while let candidate = current?.superview {
-            if let scrollView = candidate as? UIScrollView {
-                scrollView.alwaysBounceHorizontal = false
-                scrollView.isDirectionalLockEnabled = true
-                scrollView.showsHorizontalScrollIndicator = false
-                lockContentWidthToFrame(for: scrollView)
-                return
-            }
-            current = candidate
-        }
-    }
-
-    private func lockContentWidthToFrame(for scrollView: UIScrollView) {
-        if scrollView.constraints.contains(where: { $0.identifier == Self.widthLockIdentifier }) {
-            return
-        }
-        let constraint = scrollView.contentLayoutGuide.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor)
-        constraint.identifier = Self.widthLockIdentifier
-        constraint.priority = .required
-        constraint.isActive = true
     }
 }
 
