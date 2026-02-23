@@ -2,7 +2,49 @@
 
 import { useEffect, useState } from 'react';
 import { signOut } from 'next-auth/react';
-import styles from './dashboard.module.css';
+import {
+  Layout,
+  Menu,
+  Button,
+  Typography,
+  Space,
+  Card,
+  Form,
+  Input,
+  Select,
+  Switch,
+  InputNumber,
+  Table,
+  Tag,
+  Tabs,
+  Collapse,
+  message as antMessage,
+  Divider,
+  Badge,
+  Descriptions,
+  Empty
+} from 'antd';
+import {
+  LogoutOutlined,
+  CloudServerOutlined,
+  PlayCircleOutlined,
+  HistoryOutlined,
+  SettingOutlined,
+  KeyOutlined,
+  ReloadOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  SyncOutlined,
+  FileTextOutlined,
+  CodeOutlined,
+  InfoCircleOutlined
+} from '@ant-design/icons';
+import dayjs from 'dayjs';
+
+const { Header, Content } = Layout;
+const { Title, Text, Paragraph } = Typography;
+const { Option } = Select;
+const { TextArea } = Input;
 
 type ProviderName = 'deepseek' | 'qwen' | 'gemini';
 
@@ -79,8 +121,8 @@ const PROVIDER_PRESET: Record<
   },
   gemini: {
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    miniModel: 'gemini-2.0-flash-lite',
-    digestModel: 'gemini-2.0-flash-lite'
+    miniModel: 'gemini-2.5-flash-lite',
+    digestModel: 'gemini-2.5-flash-lite'
   }
 };
 
@@ -119,7 +161,6 @@ export default function DashboardClient(): JSX.Element {
   const [jobPayloadDrafts, setJobPayloadDrafts] = useState<Record<JobName, string>>(DEFAULT_JOB_PAYLOAD);
   const [jobInvokeLogs, setJobInvokeLogs] = useState<JobInvokeLog[]>([]);
   const [pat, setPat] = useState<string>('');
-  const [message, setMessage] = useState<string>('');
   const [promptForm, setPromptForm] = useState<PromptConfig>({
     miniSummarySystem: '',
     digestSystem: '',
@@ -190,38 +231,50 @@ export default function DashboardClient(): JSX.Element {
   }, []);
 
   const saveProvider = async (): Promise<void> => {
-    setMessage('正在保存 Provider 配置...');
+    const hide = antMessage.loading('正在保存 Provider 配置...', 0);
     const res = await fetch('/api/admin/providers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(providerForm)
     });
 
+    hide();
     if (res.ok) {
-      setMessage('Provider 已保存');
+      antMessage.success('Provider 已保存');
       await loadData();
       return;
     }
 
     const payload = (await res.json()) as { error?: string };
-    setMessage(`保存失败: ${payload.error ?? res.statusText}`);
+    antMessage.error(`保存失败: ${payload.error ?? res.statusText}`);
   };
 
   const runJob = async (name: JobName): Promise<void> => {
     const draft = jobPayloadDrafts[name] ?? '{}';
     const parsed = tryParseJsonObject(draft);
     if (!parsed.value) {
-      setMessage(`参数解析失败: ${parsed.error}`);
+      antMessage.error(`参数解析失败: ${parsed.error}`);
       return;
     }
 
-    const requestBody = parsed.value;
+    const requestBody: Record<string, unknown> = { ...parsed.value };
+    if (name === 'resummarize') {
+      const limitRaw = Number(requestBody.limit ?? 50);
+      const normalizedLimit = Number.isFinite(limitRaw) ? Math.max(1, Math.floor(limitRaw)) : 50;
+      if (normalizedLimit > 50) {
+        antMessage.warning('resummarize 单次 limit 已自动收紧到 50，避免 Cloud Run 超时。');
+      }
+      requestBody.limit = Math.min(50, normalizedLimit);
+      if (Array.isArray(requestBody.tweetIds)) {
+        requestBody.tweetIds = requestBody.tweetIds.slice(0, 50);
+      }
+    }
     const requestPath = `/api/admin/jobs/${name}/run`;
     const startedAt = new Date();
     const startedPerf = performance.now();
 
     setRunningJob(name);
-    setMessage(`正在执行 ${name}...`);
+    const hide = antMessage.loading(`正在执行 ${name}...`, 0);
 
     let ok = false;
     let responseStatus = 500;
@@ -240,15 +293,16 @@ export default function DashboardClient(): JSX.Element {
       if (!ok) {
         const value = responsePayload as { error?: string; message?: string } | null;
         errorMessage = value?.error ?? value?.message ?? res.statusText;
-        setMessage(`执行失败: ${errorMessage}`);
+        antMessage.error(`执行失败: ${errorMessage}`);
       } else {
-        setMessage(`${name} 执行完成`);
+        antMessage.success(`${name} 执行完成`);
         await loadData();
       }
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : String(error);
-      setMessage(`执行失败: ${errorMessage}`);
+      antMessage.error(`执行失败: ${errorMessage}`);
     } finally {
+      hide();
       const finishedAt = new Date();
       const durationMs = Math.max(0, Math.round(performance.now() - startedPerf));
       const log: JobInvokeLog = {
@@ -270,70 +324,66 @@ export default function DashboardClient(): JSX.Element {
   };
 
   const createPat = async (): Promise<void> => {
-    setMessage('正在创建 PAT...');
+    const hide = antMessage.loading('正在创建 PAT...', 0);
     const res = await fetch('/api/admin/pat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'ios-main', expiresInDays: 365 })
     });
 
+    hide();
     if (res.ok) {
       const payload = (await res.json()) as { token: string };
       setPat(payload.token);
-      setMessage('PAT 已创建，请妥善保存到 iOS Keychain');
+      antMessage.success('PAT 已创建');
       return;
     }
 
     const payload = (await res.json()) as { error?: string };
-    setMessage(`创建失败: ${payload.error ?? res.statusText}`);
+    antMessage.error(`创建失败: ${payload.error ?? res.statusText}`);
   };
 
   const saveSyncSettings = async (): Promise<void> => {
-    setMessage('正在保存同步计划...');
+    const hide = antMessage.loading('正在保存同步计划...', 0);
     const res = await fetch('/api/admin/sync-settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ syncIntervalHours: syncSettings.syncIntervalHours })
     });
 
+    hide();
     if (res.ok) {
-      setMessage('同步计划已保存');
+      antMessage.success('同步计划已保存');
       await loadData();
       return;
     }
 
     const payload = (await res.json()) as { error?: string; message?: string };
-    setMessage(`保存失败: ${payload.error ?? payload.message ?? res.statusText}`);
+    antMessage.error(`保存失败: ${payload.error ?? payload.message ?? res.statusText}`);
   };
 
   const saveMiniMarkdownPrompt = async (): Promise<void> => {
-    setMessage('正在保存 Mini Markdown Prompt...');
+    const hide = antMessage.loading('正在保存 Mini Markdown Prompt...', 0);
     const res = await fetch('/api/admin/prompts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ miniMarkdownSystem: promptForm.miniMarkdownSystem })
     });
 
+    hide();
     if (res.ok) {
-      setMessage('Mini Markdown Prompt 已保存');
+      antMessage.success('Mini Markdown Prompt 已保存');
       await loadData();
       return;
     }
 
     const payload = (await res.json()) as { error?: string; message?: string };
-    setMessage(`保存失败: ${payload.error ?? payload.message ?? res.statusText}`);
+    antMessage.error(`保存失败: ${payload.error ?? payload.message ?? res.statusText}`);
   };
 
   const formatTime = (value: string | null): string => {
     if (!value) return '-';
-    return new Date(value).toLocaleString('zh-CN');
-  };
-
-  const getJobStatusClass = (status: string): string => {
-    const s = status.toLowerCase();
-    if (s === 'completed' || s === 'success') return styles.jobStatusSuccess;
-    if (s.includes('error') || s.includes('fail')) return styles.jobStatusError;
-    return styles.jobStatusPending;
+    return dayjs(value).format('YYYY-MM-DD HH:mm:ss');
   };
 
   const onProviderChange = (nextProvider: ProviderName): void => {
@@ -354,432 +404,307 @@ export default function DashboardClient(): JSX.Element {
   const formatActiveJobPayload = (): void => {
     const parsed = tryParseJsonObject(jobPayloadDrafts[activeJobTab] ?? '{}');
     if (!parsed.value) {
-      setMessage(`参数格式化失败: ${parsed.error}`);
+      antMessage.error(`参数格式化失败: ${parsed.error}`);
       return;
     }
 
     setJobPayloadDrafts((prev) => ({ ...prev, [activeJobTab]: asPrettyJson(parsed.value) }));
   };
 
+  const jobColumns = [
+    {
+      title: '任务名称',
+      dataIndex: 'jobName',
+      key: 'jobName',
+      render: (text: string) => <Tag color="blue">{text}</Tag>
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status: string) => {
+        const s = status.toLowerCase();
+        let color = 'default';
+        if (s === 'completed' || s === 'success') color = 'success';
+        else if (s.includes('error') || s.includes('fail')) color = 'error';
+        else if (s === 'running') color = 'processing';
+        return <Tag color={color}>{status.toUpperCase()}</Tag>;
+      }
+    },
+    {
+      title: '开始时间',
+      dataIndex: 'startedAt',
+      key: 'startedAt',
+      render: (time: string) => formatTime(time)
+    },
+    {
+      title: '错误信息',
+      dataIndex: 'error',
+      key: 'error',
+      render: (error: string) => error ? <Text type="danger">{error}</Text> : '-'
+    }
+  ];
+
   return (
-    <div className={styles.dashboard}>
-      <header className={styles.topBar}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span className={styles.brand}>XAuto 管理后台</span>
-          <a href="/h5" className={styles.navLink}>
-            H5 演示
-          </a>
+    <Layout style={{ minHeight: '100vh' }}>
+      <Header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', background: '#001529' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+          <Title level={4} style={{ color: '#fff', margin: 0 }}>XAuto Admin</Title>
+          <Menu
+            theme="dark"
+            mode="horizontal"
+            defaultSelectedKeys={['dashboard']}
+            items={[
+              { key: 'dashboard', label: '控制面板', icon: <CloudServerOutlined /> },
+              { key: 'h5', label: <a href="/h5">H5 演示</a>, icon: <FileTextOutlined /> }
+            ]}
+          />
         </div>
-        <button type="button" className={styles.signOutBtn} onClick={() => signOut()}>
+        <Button type="text" icon={<LogoutOutlined />} style={{ color: '#fff' }} onClick={() => signOut()}>
           退出登录
-        </button>
-      </header>
+        </Button>
+      </Header>
 
-      <main className={styles.container}>
-        {/* Provider 配置 */}
-        <section className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <h2>Provider 配置</h2>
-            <p className={styles.sectionDesc}>配置 AI 模型提供商（DeepSeek / Qwen / Gemini）及 API 密钥</p>
-          </div>
+      <Content style={{ padding: '24px', maxWidth: 1200, margin: '0 auto', width: '100%' }}>
+        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+          
+          {/* 任务控制 */}
+          <Card 
+            title={<Space><PlayCircleOutlined />任务控制</Space>}
+            extra={<Button icon={<ReloadOutlined />} onClick={() => void loadData()}>刷新数据</Button>}
+          >
+            <Space wrap size="middle">
+              <Button type="primary" loading={runningJob === 'sync'} onClick={() => void runJob('sync')}>执行同步</Button>
+              <Button type="primary" loading={runningJob === 'digest_daily'} onClick={() => void runJob('digest_daily')}>执行每日摘要</Button>
+              <Button type="primary" loading={runningJob === 'digest_weekly'} onClick={() => void runJob('digest_weekly')}>执行每周摘要</Button>
+              <Button type="primary" loading={runningJob === 'resummarize'} onClick={() => void runJob('resummarize')}>刷新历史摘要</Button>
+            </Space>
 
-          <div className={styles.formGrid}>
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel}>Provider</label>
-              <select
-                className={styles.formSelect}
-                value={providerForm.provider}
-                onChange={(e) => onProviderChange(e.target.value as ProviderName)}
-              >
-                <option value="deepseek">DeepSeek</option>
-                <option value="qwen">Qwen</option>
-                <option value="gemini">Gemini (cheap)</option>
-              </select>
-            </div>
+            <Divider />
 
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel}>Base URL</label>
-              <input
-                className={styles.formInput}
-                value={providerForm.baseUrl}
-                onChange={(e) => setProviderForm((prev) => ({ ...prev, baseUrl: e.target.value }))}
-              />
-            </div>
-
-            <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
-              <label className={styles.formLabel}>API Key</label>
-              <input
-                className={styles.formInput}
-                type="password"
-                value={providerForm.apiKey}
-                onChange={(e) => setProviderForm((prev) => ({ ...prev, apiKey: e.target.value }))}
-                placeholder="留空则保持现有密钥"
-              />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel}>Mini Model</label>
-              <input
-                className={styles.formInput}
-                value={providerForm.miniModel}
-                onChange={(e) => setProviderForm((prev) => ({ ...prev, miniModel: e.target.value }))}
-              />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel}>Digest Model</label>
-              <input
-                className={styles.formInput}
-                value={providerForm.digestModel}
-                onChange={(e) => setProviderForm((prev) => ({ ...prev, digestModel: e.target.value }))}
-              />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel}>Priority</label>
-              <input
-                className={styles.formInput}
-                type="number"
-                value={providerForm.priority}
-                onChange={(e) =>
-                  setProviderForm((prev) => ({ ...prev, priority: Number(e.target.value) }))
-                }
-              />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel}>月预算 (CNY)</label>
-              <input
-                className={styles.formInput}
-                type="number"
-                value={providerForm.monthlyBudgetCny}
-                onChange={(e) =>
-                  setProviderForm((prev) => ({ ...prev, monthlyBudgetCny: Number(e.target.value) }))
-                }
-              />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel}>启用</label>
-              <div className={styles.toggleRow}>
-                <button
-                  type="button"
-                  className={`${styles.toggle} ${providerForm.enabled ? styles.toggleActive : ''}`}
-                  onClick={() => setProviderForm((prev) => ({ ...prev, enabled: !prev.enabled }))}
-                  aria-pressed={providerForm.enabled}
-                />
-                <span className={styles.formLabel}>{providerForm.enabled ? '已启用' : '已禁用'}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className={styles.btnGroup}>
-            <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => void saveProvider()}>
-              保存 Provider
-            </button>
-          </div>
-
-          <h3 className={styles.subsectionTitle}>当前 Providers</h3>
-          <ul className={styles.providerList}>
-            {providers.map((item) => (
-              <li key={item.id} className={styles.providerItem}>
-                <span className={styles.providerBadge}>{item.provider}</span>
-                <span className={styles.providerMeta}>
-                  mini=<code>{item.miniModel}</code> digest=<code>{item.digestModel}</code>
-                </span>
-                <span
-                  className={`${styles.apiKeyStatus} ${item.hasApiKey ? styles.apiKeySet : styles.apiKeyMissing}`}
-                >
-                  {item.hasApiKey ? 'API Key 已配置' : 'API Key 缺失'}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {/* Job 控制 */}
-        <section className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <h2>任务控制</h2>
-            <p className={styles.sectionDesc}>手动触发同步与摘要任务</p>
-          </div>
-
-          <div className={styles.jobActions}>
-            <button
-              type="button"
-              className={`${styles.btn} ${styles.btnPrimary}`}
-              disabled={runningJob !== null}
-              onClick={() => void runJob('sync')}
-            >
-              {runningJob === 'sync' ? '执行中...' : '执行同步'}
-            </button>
-            <button
-              type="button"
-              className={`${styles.btn} ${styles.btnPrimary}`}
-              disabled={runningJob !== null}
-              onClick={() => void runJob('digest_daily')}
-            >
-              {runningJob === 'digest_daily' ? '执行中...' : '执行每日摘要'}
-            </button>
-            <button
-              type="button"
-              className={`${styles.btn} ${styles.btnPrimary}`}
-              disabled={runningJob !== null}
-              onClick={() => void runJob('digest_weekly')}
-            >
-              {runningJob === 'digest_weekly' ? '执行中...' : '执行每周摘要'}
-            </button>
-            <button
-              type="button"
-              className={`${styles.btn} ${styles.btnPrimary}`}
-              disabled={runningJob !== null}
-              onClick={() => void runJob('resummarize')}
-            >
-              {runningJob === 'resummarize' ? '执行中...' : '刷新历史摘要'}
-            </button>
-            <button
-              type="button"
-              className={`${styles.btn} ${styles.btnSecondary}`}
-              disabled={runningJob !== null}
-              onClick={() => void loadData()}
-            >
-              刷新列表
-            </button>
-          </div>
-
-          <div className={styles.jobDebugPanel}>
-            <div className={styles.jobDebugHeader}>
-              <h3 className={styles.subsectionTitle}>触发调试</h3>
-              <p className={styles.sectionDesc}>查看每次触发的入参、接口返回值、状态码与耗时。</p>
-            </div>
-
-            <div className={styles.jobTabs}>
-              {(['sync', 'digest_daily', 'digest_weekly', 'resummarize'] as JobName[]).map((jobName) => (
-                <button
-                  key={jobName}
-                  type="button"
-                  className={activeJobTab === jobName ? styles.jobTabActive : styles.jobTab}
-                  onClick={() => setActiveJobTab(jobName)}
-                >
-                  {jobName}
-                </button>
-              ))}
-            </div>
-
-            <label className={styles.formLabel} htmlFor="job-payload-json">
-              Request Body (JSON)
-            </label>
-            <textarea
-              id="job-payload-json"
-              className={`${styles.formTextarea} ${styles.jobPayloadTextarea}`}
-              value={jobPayloadDrafts[activeJobTab]}
-              onChange={(event) => updateJobPayloadDraft(activeJobTab, event.target.value)}
+            <Tabs
+              activeKey={activeJobTab}
+              onChange={(key) => setActiveJobTab(key as JobName)}
+              items={[
+                { key: 'sync', label: '同步任务' },
+                { key: 'digest_daily', label: '每日摘要' },
+                { key: 'digest_weekly', label: '每周摘要' },
+                { key: 'resummarize', label: '刷新摘要' }
+              ]}
             />
 
-            <div className={styles.btnGroup}>
-              <button
-                type="button"
-                className={`${styles.btn} ${styles.btnPrimary}`}
-                disabled={runningJob !== null}
-                onClick={() => void runJob(activeJobTab)}
-              >
-                {runningJob === activeJobTab ? `执行中 ${activeJobTab}...` : `执行 ${activeJobTab}`}
-              </button>
-              <button type="button" className={`${styles.btn} ${styles.btnSecondary}`} onClick={formatActiveJobPayload}>
-                格式化 JSON
-              </button>
-              <button
-                type="button"
-                className={`${styles.btn} ${styles.btnSecondary}`}
-                onClick={() => updateJobPayloadDraft(activeJobTab, DEFAULT_JOB_PAYLOAD[activeJobTab])}
-              >
-                重置参数
-              </button>
-            </div>
-
-            <div className={styles.jobLogList}>
-              {jobInvokeLogs.length === 0 ? (
-                <p className={styles.jobLogEmpty}>尚无触发记录，执行任务后会在这里展示完整请求和响应。</p>
-              ) : (
-                jobInvokeLogs.map((log) => (
-                  <details key={log.id} className={styles.jobLogCard}>
-                    <summary className={styles.jobLogSummary}>
-                      <span className={styles.jobLogName}>{log.name}</span>
-                      <span className={log.ok ? styles.jobLogStatusOk : styles.jobLogStatusError}>
-                        {log.responseStatus}
-                      </span>
-                      <span className={styles.jobLogMeta}>
-                        {new Date(log.startedAt).toLocaleString('zh-CN')} · {log.durationMs}ms
-                      </span>
-                    </summary>
-                    <div className={styles.jobLogBody}>
-                      <div className={styles.jobLogLine}>
-                        <strong>Request</strong>
-                        <code>
-                          POST {log.requestPath}
-                        </code>
-                      </div>
-                      <pre className={styles.jobLogPre}>{asPrettyJson(log.requestBody)}</pre>
-                      <div className={styles.jobLogLine}>
-                        <strong>Response</strong>
-                        <code>
-                          HTTP {log.responseStatus} {log.ok ? 'OK' : 'ERROR'}
-                        </code>
-                      </div>
-                      <pre className={styles.jobLogPre}>{asPrettyJson(log.responsePayload)}</pre>
-                      {log.errorMessage ? <p className={styles.jobLogError}>Error: {log.errorMessage}</p> : null}
-                    </div>
-                  </details>
-                ))
-              )}
-            </div>
-          </div>
-
-          <ul className={styles.jobList}>
-            {jobs.map((job) => (
-              <li key={job._id} className={styles.jobItem}>
-                <span className={styles.jobName}>{job.jobName}</span>
-                <span className={`${styles.jobStatus} ${getJobStatusClass(job.status)}`}>
-                  {job.status}
-                </span>
-                <span className={styles.jobTime}>{formatTime(job.startedAt)}</span>
-                {job.error ? <div className={styles.jobError}>{job.error}</div> : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {/* 同步计划 */}
-        <section className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <h2>同步计划</h2>
-            <p className={styles.sectionDesc}>
-              默认每 24 小时同步一次。调度器可更频繁调用，后端会跳过未到期的执行。
-            </p>
-          </div>
-
-          <div className={styles.formGrid}>
-            <div className={styles.formGroup} style={{ maxWidth: 200 }}>
-              <label className={styles.formLabel}>同步间隔（小时）</label>
-              <input
-                className={styles.formInput}
-                type="number"
-                min={1}
-                max={168}
-                value={syncSettings.syncIntervalHours}
-                onChange={(e) =>
-                  setSyncSettings((prev) => ({ ...prev, syncIntervalHours: Number(e.target.value) }))
-                }
+            <div style={{ marginTop: 16 }}>
+              <Text strong>Request Body (JSON)</Text>
+              <TextArea
+                rows={4}
+                value={jobPayloadDrafts[activeJobTab]}
+                onChange={(e) => updateJobPayloadDraft(activeJobTab, e.target.value)}
+                style={{ fontFamily: 'monospace', marginTop: 8 }}
               />
+              <Space style={{ marginTop: 12 }}>
+                <Button type="primary" icon={<PlayCircleOutlined />} onClick={() => void runJob(activeJobTab)}>
+                  执行 {activeJobTab}
+                </Button>
+                <Button onClick={formatActiveJobPayload}>格式化 JSON</Button>
+                <Button onClick={() => updateJobPayloadDraft(activeJobTab, DEFAULT_JOB_PAYLOAD[activeJobTab])}>重置参数</Button>
+              </Space>
             </div>
+
+            <Collapse ghost style={{ marginTop: 24 }}>
+              <Collapse.Panel header={<Space><HistoryOutlined />调用历史 (最近 20 条)</Space>} key="1">
+                {jobInvokeLogs.length === 0 ? (
+                  <Empty description="尚无触发记录" />
+                ) : (
+                  <Collapse accordion>
+                    {jobInvokeLogs.map((log) => (
+                      <Collapse.Panel
+                        key={log.id}
+                        header={
+                          <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', paddingRight: 24 }}>
+                            <Space>
+                              <Tag color={log.ok ? 'success' : 'error'}>{log.responseStatus}</Tag>
+                              <Text strong>{log.name}</Text>
+                            </Space>
+                            <Text type="secondary">{dayjs(log.startedAt).format('HH:mm:ss')} · {log.durationMs}ms</Text>
+                          </div>
+                        }
+                      >
+                        <Descriptions bordered column={1} size="small">
+                          <Descriptions.Item label="Request">
+                            <Tag color="blue">POST</Tag> <code>{log.requestPath}</code>
+                            <pre style={{ background: '#f5f5f5', padding: 8, marginTop: 8 }}>{asPrettyJson(log.requestBody)}</pre>
+                          </Descriptions.Item>
+                          <Descriptions.Item label="Response">
+                            <Badge status={log.ok ? 'success' : 'error'} text={`HTTP ${log.responseStatus}`} />
+                            <pre style={{ background: '#f5f5f5', padding: 8, marginTop: 8 }}>{asPrettyJson(log.responsePayload)}</pre>
+                          </Descriptions.Item>
+                          {log.errorMessage && (
+                            <Descriptions.Item label="Error">
+                              <Text type="danger">{log.errorMessage}</Text>
+                            </Descriptions.Item>
+                          )}
+                        </Descriptions>
+                      </Collapse.Panel>
+                    ))}
+                  </Collapse>
+                )}
+              </Collapse.Panel>
+            </Collapse>
+
+            <Divider orientation="left">最近任务运行状态</Divider>
+            <Table 
+              dataSource={jobs} 
+              columns={jobColumns} 
+              rowKey="_id" 
+              size="small" 
+              pagination={{ pageSize: 5 }}
+            />
+          </Card>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))', gap: 24 }}>
+            {/* Provider 配置 */}
+            <Card title={<Space><CloudServerOutlined />Provider 配置</Space>}>
+              <Form layout="vertical" onFinish={saveProvider}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                  <Form.Item label="Provider">
+                    <Select value={providerForm.provider} onChange={onProviderChange}>
+                      <Option value="deepseek">DeepSeek</Option>
+                      <Option value="qwen">Qwen</Option>
+                      <Option value="gemini">Gemini (cheap)</Option>
+                    </Select>
+                  </Form.Item>
+                  <Form.Item label="优先级">
+                    <InputNumber 
+                      style={{ width: '100%' }} 
+                      value={providerForm.priority} 
+                      onChange={(v) => setProviderForm(p => ({ ...p, priority: v || 0 }))} 
+                    />
+                  </Form.Item>
+                </div>
+
+                <Form.Item label="Base URL">
+                  <Input 
+                    value={providerForm.baseUrl} 
+                    onChange={e => setProviderForm(p => ({ ...p, baseUrl: e.target.value }))} 
+                  />
+                </Form.Item>
+
+                <Form.Item label="API Key" tooltip="留空则保持现有密钥">
+                  <Input.Password 
+                    value={providerForm.apiKey} 
+                    onChange={e => setProviderForm(p => ({ ...p, apiKey: e.target.value }))} 
+                    placeholder="API Key"
+                  />
+                </Form.Item>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                  <Form.Item label="Mini Model">
+                    <Input 
+                      value={providerForm.miniModel} 
+                      onChange={e => setProviderForm(p => ({ ...p, miniModel: e.target.value }))} 
+                    />
+                  </Form.Item>
+                  <Form.Item label="Digest Model">
+                    <Input 
+                      value={providerForm.digestModel} 
+                      onChange={e => setProviderForm(p => ({ ...p, digestModel: e.target.value }))} 
+                    />
+                  </Form.Item>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Form.Item label="启用状态" style={{ marginBottom: 0 }}>
+                    <Switch 
+                      checked={providerForm.enabled} 
+                      onChange={v => setProviderForm(p => ({ ...p, enabled: v }))} 
+                      checkedChildren="已启用" 
+                      unCheckedChildren="已禁用"
+                    />
+                  </Form.Item>
+                  <Button type="primary" onClick={saveProvider}>保存配置</Button>
+                </div>
+              </Form>
+
+              <Divider orientation="left">当前 Providers</Divider>
+              <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                {providers.map(p => (
+                  <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+                    <Space>
+                      <Tag color="cyan">{p.provider}</Tag>
+                      <Text type="secondary" size="small">mini: {p.miniModel}</Text>
+                    </Space>
+                    <Badge status={p.hasApiKey ? 'success' : 'warning'} text={p.hasApiKey ? 'API Key OK' : 'Key 缺失'} />
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            {/* 同步计划 & PAT */}
+            <Space direction="vertical" size="large" style={{ width: '100%' }}>
+              <Card title={<Space><SyncOutlined />同步计划</Space>}>
+                <Form layout="inline">
+                  <Form.Item label="间隔 (小时)">
+                    <InputNumber 
+                      min={1} 
+                      max={168} 
+                      value={syncSettings.syncIntervalHours} 
+                      onChange={v => setSyncSettings(p => ({ ...p, syncIntervalHours: v || 24 }))} 
+                    />
+                  </Form.Item>
+                  <Button type="primary" onClick={saveSyncSettings}>保存计划</Button>
+                </Form>
+                <Descriptions size="small" column={1} style={{ marginTop: 16 }}>
+                  <Descriptions.Item label="上次执行">{formatTime(syncSettings.lastRunAt)}</Descriptions.Item>
+                  <Descriptions.Item label="下次执行">{formatTime(syncSettings.nextRunAt)}</Descriptions.Item>
+                  <Descriptions.Item label="更新时间">{formatTime(syncSettings.updatedAt)}</Descriptions.Item>
+                </Descriptions>
+              </Card>
+
+              <Card title={<Space><KeyOutlined />PAT 配对令牌</Space>}>
+                <Paragraph type="secondary">为 iOS 应用签发只读令牌，有效期 365 天。</Paragraph>
+                <Button type="primary" icon={<KeyOutlined />} onClick={createPat}>重新创建 PAT</Button>
+                {pat && (
+                  <div style={{ marginTop: 16, padding: 12, background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 4 }}>
+                    <Text strong copyable>{pat}</Text>
+                    <div style={{ marginTop: 4 }}><Text type="warning" size="small">请妥善保存，创建后无法再次查看</Text></div>
+                  </div>
+                )}
+              </Card>
+            </Space>
           </div>
 
-          <div className={styles.btnGroup}>
-            <button
-              type="button"
-              className={`${styles.btn} ${styles.btnPrimary}`}
-              onClick={() => void saveSyncSettings()}
-            >
-              保存计划
-            </button>
-          </div>
+          {/* Prompt 模板 */}
+          <Card title={<Space><CodeOutlined />Prompt 模板</Space>}>
+            <Collapse defaultActiveKey={['3']}>
+              <Collapse.Panel header={<Space><InfoCircleOutlined />结构化 Prompt (只读)</Space>} key="1">
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <Text strong>Mini Summary Prompt</Text>
+                  <TextArea rows={6} value={promptForm.miniSummarySystem} readOnly disabled style={{ background: '#f5f5f5' }} />
+                  <Text strong>Digest Prompt</Text>
+                  <TextArea rows={4} value={promptForm.digestSystem} readOnly disabled style={{ background: '#f5f5f5' }} />
+                </Space>
+              </Collapse.Panel>
+              <Collapse.Panel header={<Space><CodeOutlined />Mini Markdown Prompt (可编辑)</Space>} key="3">
+                <TextArea 
+                  rows={8} 
+                  value={promptForm.miniMarkdownSystem} 
+                  onChange={e => setPromptForm(p => ({ ...p, miniMarkdownSystem: e.target.value }))}
+                  disabled={!promptForm.miniMarkdownSystemEditable}
+                />
+                <Button 
+                  type="primary" 
+                  style={{ marginTop: 12 }} 
+                  onClick={saveMiniMarkdownPrompt}
+                  disabled={!promptForm.miniMarkdownSystemEditable}
+                >
+                  保存 Markdown Prompt
+                </Button>
+              </Collapse.Panel>
+            </Collapse>
+          </Card>
 
-          <div className={styles.syncMeta}>
-            <span>上次执行: {formatTime(syncSettings.lastRunAt)}</span>
-            <span>下次执行: {formatTime(syncSettings.nextRunAt)}</span>
-            <span>更新时间: {formatTime(syncSettings.updatedAt)}</span>
-          </div>
-        </section>
-
-        {/* Prompt 模板 */}
-        <section className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <h2>Prompt 模板</h2>
-            <p className={styles.sectionDesc}>结构化字段依赖这两个 Prompt 的固定输出格式，已锁定为只读</p>
-          </div>
-
-          <div className={styles.formGrid}>
-            <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
-              <label className={styles.formLabel}>Mini Summary Prompt</label>
-              <textarea
-                className={`${styles.formTextarea} ${styles.formTextareaLarge} ${styles.formTextareaLocked}`}
-                rows={14}
-                value={promptForm.miniSummarySystem}
-                readOnly
-                disabled
-                title="结构化 Prompt 已锁定，不可编辑"
-              />
-            </div>
-            <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
-              <label className={styles.formLabel}>Digest Prompt</label>
-              <textarea
-                className={`${styles.formTextarea} ${styles.formTextareaLocked}`}
-                rows={8}
-                value={promptForm.digestSystem}
-                readOnly
-                disabled
-                title="结构化 Prompt 已锁定，不可编辑"
-              />
-            </div>
-          </div>
-
-          <div className={styles.formGrid}>
-            <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
-              <label className={styles.formLabel}>Mini Markdown Prompt（可编辑）</label>
-              <textarea
-                className={`${styles.formTextarea} ${styles.formTextareaLarge}`}
-                rows={12}
-                value={promptForm.miniMarkdownSystem}
-                readOnly={!promptForm.miniMarkdownSystemEditable}
-                onChange={(e) => setPromptForm((prev) => ({ ...prev, miniMarkdownSystem: e.target.value }))}
-              />
-            </div>
-          </div>
-
-          <div className={styles.btnGroup}>
-            <button
-              type="button"
-              className={`${styles.btn} ${styles.btnPrimary}`}
-              onClick={() => void saveMiniMarkdownPrompt()}
-              disabled={!promptForm.miniMarkdownSystemEditable}
-            >
-              保存 Mini Markdown Prompt
-            </button>
-          </div>
-
-          <p className={styles.sectionDesc}>该 Prompt 仅影响自由 Markdown 展示，不影响结构化字段与筛选统计。</p>
-        </section>
-
-        {/* PAT */}
-        <section className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <h2>PAT 配对令牌</h2>
-            <p className={styles.sectionDesc}>为 iOS 应用签发只读令牌</p>
-          </div>
-
-          <div className={styles.patSection}>
-            <button
-              type="button"
-              className={`${styles.btn} ${styles.btnPrimary}`}
-              onClick={() => void createPat()}
-            >
-              创建 PAT
-            </button>
-            {pat ? (
-              <>
-                <div className={styles.patToken}>{pat}</div>
-                <p className={styles.patWarning}>请妥善保存，创建后无法再次查看</p>
-              </>
-            ) : null}
-          </div>
-        </section>
-      </main>
-
-      {message ? (
-        <div className={styles.messageBar} role="status">
-          {message}
-        </div>
-      ) : null}
-    </div>
+        </Space>
+      </Content>
+    </Layout>
   );
 }

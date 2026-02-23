@@ -66,6 +66,7 @@ export class AiService {
         ]);
 
         const normalized = this.normalizeMini(response, provider.provider, provider.miniModel);
+        this.assertMiniSummaryShape(normalized);
         await this.budgetService.recordUsageCny(this.estimateMiniCost(item.text));
         const renderMarkdown = await this.generateMiniMarkdown(item, normalized, provider).catch(() =>
           this.buildMiniMarkdownFallback(normalized)
@@ -80,22 +81,23 @@ export class AiService {
       }
     }
 
+    const fallbackProvider = providers[0]?.provider ?? 'gemini';
     const fallback: SummaryResult = {
-      oneLinerZh: item.text.slice(0, 20) || '无摘要',
-      oneLinerEn: item.text.slice(0, 40) || 'No summary',
-      bulletsZh: [item.text.slice(0, 80)],
-      bulletsEn: [item.text.slice(0, 120)],
-      tagsZh: ['未分类'],
-      tagsEn: ['uncategorized'],
-      actions: [],
+      oneLinerZh: '模型暂时不可用，已标记为待重试',
+      oneLinerEn: 'Model unavailable; marked for retry.',
+      bulletsZh: ['本条内容暂未拿到稳定结构化输出，建议稍后重试摘要。'],
+      bulletsEn: ['Structured output is temporarily unavailable; please retry summary later.'],
+      tagsZh: ['系统降级'],
+      tagsEn: ['system-fallback'],
+      actions: ['在 Admin 中执行刷新摘要重试该条目'],
       renderMarkdown: '',
-      coreViewpoint: item.text.slice(0, 60) || '无核心观点',
-      underlyingProblem: '待补充',
+      coreViewpoint: '模型暂时不可用，已标记为待重试',
+      underlyingProblem: '当前无法稳定获取结构化结果，需要稍后重试。',
       keyTechnologies: [],
       claimTypes: [],
-      researchKeywordsEn: [],
-      qualityScore: 0.4,
-      provider: 'deepseek',
+      researchKeywordsEn: ['model-retry', 'summary-fallback', 'x-post-analysis'],
+      qualityScore: 0.2,
+      provider: fallbackProvider,
       model: 'fallback'
     };
 
@@ -179,24 +181,22 @@ export class AiService {
   ): Promise<Record<string, unknown>> {
     const url = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
 
-    const response = await axios.post(
-      url,
-      {
-        model,
-        messages,
-        temperature: 0.2,
-        response_format: { type: 'json_object' }
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000
-      }
-    );
+    const response = await this.postChatCompletionsWithRetry(url, apiKey, {
+      model,
+      messages,
+      temperature: 0.2,
+      response_format: { type: 'json_object' }
+    });
 
-    const content = response.data?.choices?.[0]?.message?.content;
+    const choices = Array.isArray(response?.choices) ? response.choices : [];
+    const firstMessage =
+      choices.length > 0 && choices[0] && typeof choices[0] === 'object'
+        ? (choices[0] as Record<string, unknown>).message
+        : undefined;
+    const content =
+      firstMessage && typeof firstMessage === 'object'
+        ? (firstMessage as Record<string, unknown>).content
+        : undefined;
 
     if (typeof content !== 'string') {
       throw new Error('Model response content missing');
@@ -213,23 +213,21 @@ export class AiService {
   ): Promise<string> {
     const url = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
 
-    const response = await axios.post(
-      url,
-      {
-        model,
-        messages,
-        temperature: 0.4
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000
-      }
-    );
+    const response = await this.postChatCompletionsWithRetry(url, apiKey, {
+      model,
+      messages,
+      temperature: 0.4
+    });
 
-    const content = response.data?.choices?.[0]?.message?.content;
+    const choices = Array.isArray(response?.choices) ? response.choices : [];
+    const firstMessage =
+      choices.length > 0 && choices[0] && typeof choices[0] === 'object'
+        ? (choices[0] as Record<string, unknown>).message
+        : undefined;
+    const content =
+      firstMessage && typeof firstMessage === 'object'
+        ? (firstMessage as Record<string, unknown>).content
+        : undefined;
     if (typeof content === 'string') {
       return content;
     }
@@ -245,6 +243,39 @@ export class AiService {
     }
 
     throw new Error('Model response content missing');
+  }
+
+  private async postChatCompletionsWithRetry(
+    url: string,
+    apiKey: string,
+    payload: Record<string, unknown>,
+    maxAttempts = 3
+  ): Promise<Record<string, unknown>> {
+    let attempt = 0;
+    let lastError: unknown;
+
+    while (attempt < maxAttempts) {
+      attempt += 1;
+      try {
+        const response = await axios.post(url, payload, {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 30000
+        });
+
+        return response.data as Record<string, unknown>;
+      } catch (error) {
+        lastError = error;
+        if (!this.shouldRetryModelError(error) || attempt >= maxAttempts) {
+          throw error;
+        }
+        await this.sleep(this.retryDelayMs(attempt));
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error('Model call failed after retries');
   }
 
   private normalizeMini(payload: Record<string, unknown>, provider: ProviderName, model: string): SummaryResult {
@@ -267,21 +298,37 @@ export class AiService {
     const githubLibraries = this.parseGithubLibraries(payload);
 
     const keyTechnologies = this.parseKeyTechnologies(payload);
-    const claimTypes = this.parseClaimTypes(payload);
+    let claimTypes = this.parseClaimTypes(payload);
 
-    const researchKeywordsEn = this.takeUniqueStrings(
-      this.toStringList(this.pickFromPayload(payload, ['research_keywords_en', 'research_keywords', '英文关键词'])),
-      6
-    );
+    const claimStatementFallback = claimTypes.find((item) => item.statement.trim().length > 0)?.statement ?? '';
+    const coreViewpoint =
+      coreViewpointRaw
+      || oneLinerZhRaw
+      || reusableInsights[0]
+      || logicStructure[0]
+      || hiddenAssumptions[0]
+      || counterViews[0]
+      || claimStatementFallback
+      || '';
+    const oneLinerZh = oneLinerZhRaw || coreViewpoint || claimStatementFallback || '';
+    const oneLinerEn = oneLinerEnRaw || (oneLinerZh ? `Key point: ${oneLinerZh}` : '');
 
-    const coreViewpoint = coreViewpointRaw || oneLinerZhRaw || reusableInsights[0] || logicStructure[0] || '无摘要';
-    const oneLinerZh = oneLinerZhRaw || coreViewpoint;
-    const oneLinerEn = oneLinerEnRaw || oneLinerZh || 'No summary';
+    if (claimTypes.length === 0 && oneLinerZh) {
+      claimTypes = [
+        {
+          statement: oneLinerZh.slice(0, 300),
+          label: 'opinion'
+        }
+      ];
+    }
 
     const underlyingProblem =
       String(this.pickFromPayload(payload, ['underlying_problem', '底层问题']) ?? '').trim()
       || hiddenAssumptions[0]
-      || '';
+      || logicStructure[0]
+      || counterViews[0]
+      || claimTypes.find((item) => item.label !== 'fact')?.statement
+      || (oneLinerZh ? '该观点背后的关键前提和约束有待进一步验证。' : '');
 
     const bulletsZh = this.takeUniqueStrings(
       [
@@ -299,6 +346,12 @@ export class AiService {
       3
     );
 
+    const parsedTagsEn = this.toStringList(this.pickFromPayload(payload, ['tags_en']));
+    let researchKeywordsEn = this.takeUniqueStrings(
+      this.toStringList(this.pickFromPayload(payload, ['research_keywords_en', 'research_keywords', '英文关键词'])),
+      6
+    );
+
     const tagsZh = this.takeUniqueStrings(
       [
         ...this.toStringList(this.pickFromPayload(payload, ['tags_zh', '标签'])),
@@ -308,13 +361,19 @@ export class AiService {
       5
     );
 
-    const tagsEn = this.takeUniqueStrings(
-      [
-        ...this.toStringList(this.pickFromPayload(payload, ['tags_en'])),
-        ...researchKeywordsEn
-      ],
-      5
-    );
+    let tagsEn = this.takeUniqueStrings([...parsedTagsEn, ...researchKeywordsEn], 5);
+    if (tagsEn.length === 0) {
+      tagsEn = this.takeUniqueStrings(
+        keyTechnologies.map((item) => item.concept),
+        5
+      );
+    }
+
+    if (researchKeywordsEn.length === 0) {
+      researchKeywordsEn = tagsEn.length > 0
+        ? this.takeUniqueStrings(tagsEn.map((item) => item.replace(/\s+/g, '-').toLowerCase()), 3)
+        : ['x-post-analysis'];
+    }
 
     const actions = this.takeUniqueStrings(
       [
@@ -330,7 +389,7 @@ export class AiService {
     return {
       oneLinerZh,
       oneLinerEn,
-      bulletsZh: bulletsZh.length > 0 ? bulletsZh : [oneLinerZh],
+      bulletsZh: bulletsZh.length > 0 ? bulletsZh : (oneLinerZh ? [oneLinerZh] : []),
       bulletsEn,
       tagsZh,
       tagsEn,
@@ -345,6 +404,24 @@ export class AiService {
       provider,
       model
     };
+  }
+
+  private assertMiniSummaryShape(summary: SummaryResult): void {
+    const oneLinerZh = summary.oneLinerZh.trim();
+    const coreViewpoint = summary.coreViewpoint.trim();
+    const underlyingProblem = summary.underlyingProblem.trim();
+
+    if (!oneLinerZh || oneLinerZh === '无摘要') {
+      throw new Error('Mini summary missing oneLinerZh');
+    }
+
+    if (!coreViewpoint || coreViewpoint === '无摘要') {
+      throw new Error('Mini summary missing coreViewpoint');
+    }
+
+    if (!underlyingProblem || underlyingProblem === '待补充') {
+      throw new Error('Mini summary missing underlyingProblem');
+    }
   }
 
   private async generateMiniMarkdown(
@@ -412,20 +489,58 @@ export class AiService {
   }
 
   private pickFromPayload(payload: Record<string, unknown>, keys: string[]): unknown {
+    const candidateRoots: unknown[] = [
+      payload,
+      payload.A,
+      payload.a,
+      payload.analysis,
+      payload.data,
+      payload.result,
+      payload.output
+    ];
+
     for (const key of keys) {
-      const value = this.readPath(payload, key);
-      if (value === undefined || value === null) {
-        continue;
-      }
+      for (const root of candidateRoots) {
+        if (!root || typeof root !== 'object' || Array.isArray(root)) {
+          continue;
+        }
 
-      if (typeof value === 'string' && value.trim().length === 0) {
-        continue;
-      }
+        const value = this.readPath(root, key);
+        if (value === undefined || value === null) {
+          continue;
+        }
 
-      return value;
+        if (typeof value === 'string' && value.trim().length === 0) {
+          continue;
+        }
+
+        return value;
+      }
     }
 
     return undefined;
+  }
+
+  private shouldRetryModelError(error: unknown): boolean {
+    if (!axios.isAxiosError(error)) {
+      return false;
+    }
+
+    const status = error.response?.status;
+    if (!status) {
+      return true;
+    }
+
+    return status === 408 || status === 429 || (status >= 500 && status < 600);
+  }
+
+  private retryDelayMs(attempt: number): number {
+    const base = 500 * (2 ** (attempt - 1));
+    return Math.min(base, 5000);
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private readPath(source: unknown, path: string): unknown {

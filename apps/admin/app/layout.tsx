@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { AntdRegistry } from '@ant-design/nextjs-registry';
 import './styles.css';
 import ClientLayout from './client-layout';
 
@@ -11,7 +12,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }):
   return (
     <html lang="en">
       <body>
-        <ClientLayout>{children}</ClientLayout>
+        <AntdRegistry>
+          <ClientLayout>{children}</ClientLayout>
+        </AntdRegistry>
       </body>
     </html>
   );

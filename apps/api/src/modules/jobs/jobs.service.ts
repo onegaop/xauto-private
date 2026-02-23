@@ -57,11 +57,11 @@ export class JobsService {
 
   async triggerResummarize(payload?: Record<string, unknown>): Promise<Record<string, unknown>> {
     const limitRaw = Number(payload?.limit ?? 50);
-    const limit = Number.isFinite(limitRaw) ? Math.min(500, Math.max(1, Math.floor(limitRaw))) : 50;
+    const limit = Number.isFinite(limitRaw) ? Math.min(50, Math.max(1, Math.floor(limitRaw))) : 50;
     const overwrite = typeof payload?.overwrite === 'boolean' ? payload.overwrite : true;
     const sinceSyncedAt = typeof payload?.sinceSyncedAt === 'string' ? payload.sinceSyncedAt : undefined;
     const tweetIds = Array.isArray(payload?.tweetIds)
-      ? payload.tweetIds.map((item) => String(item)).filter(Boolean).slice(0, 500)
+      ? payload.tweetIds.map((item) => String(item)).filter(Boolean).slice(0, 50)
       : undefined;
 
     return this.executeJob('resummarize', async () =>

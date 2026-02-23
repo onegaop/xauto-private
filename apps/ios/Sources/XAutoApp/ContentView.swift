@@ -2,6 +2,102 @@ import SwiftUI
 import MarkdownUI
 import UIKit
 
+// MARK: - Refresh Control
+
+private struct ModernRefreshControl: View {
+    let coordinateSpace: String
+    let onRefresh: () async -> Void
+    
+    @State private var refreshState: RefreshState = .idle
+    @State private var progress: CGFloat = 0
+    
+    enum RefreshState {
+        case idle
+        case pulling
+        case refreshing
+    }
+    
+    var body: some View {
+        GeometryReader { proxy in
+            let frame = proxy.frame(in: .named(coordinateSpace))
+            let y = frame.minY
+            
+            Color.clear
+                .preference(key: RefreshPreference.self, value: y)
+                .onAppear {
+                    // Initial state
+                }
+        }
+        .frame(height: 0)
+        .onPreferenceChange(RefreshPreference.self) { y in
+            DispatchQueue.main.async {
+                if refreshState == .refreshing { return }
+                
+                let threshold: CGFloat = 80
+                progress = min(1, max(0, y / threshold))
+                
+                if y > threshold && refreshState == .pulling {
+                    refreshState = .refreshing
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    Task {
+                        await onRefresh()
+                        withAnimation(.spring()) {
+                            refreshState = .idle
+                            progress = 0
+                        }
+                    }
+                } else if y > 0 && y <= threshold {
+                    refreshState = .pulling
+                } else if y <= 0 {
+                    refreshState = .idle
+                }
+            }
+        }
+        .overlay(
+            ZStack {
+                if refreshState != .idle || progress > 0 {
+                    VStack(spacing: 8) {
+                        ZStack {
+                            Circle()
+                                .stroke(Color.orange.opacity(0.2), lineWidth: 3)
+                                .frame(width: 30, height: 30)
+                            
+                            Circle()
+                                .trim(from: 0, to: refreshState == .refreshing ? 0.7 : progress)
+                                .stroke(Color.orange, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                                .frame(width: 30, height: 30)
+                                .rotationEffect(Angle(degrees: refreshState == .refreshing ? 360 : 0))
+                                .animation(refreshState == .refreshing ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: refreshState)
+                            
+                            if refreshState == .pulling {
+                                Image(systemName: "arrow.down")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(.orange)
+                                    .rotationEffect(Angle(degrees: progress * 180))
+                            }
+                        }
+                        
+                        Text(refreshState == .refreshing ? "正在同步..." : "下拉刷新")
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .opacity(Double(progress))
+                    }
+                    .offset(y: -50)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            , alignment: .top
+        )
+    }
+}
+
+private struct RefreshPreference: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 // MARK: - Design System
 
 private enum DS {
@@ -69,59 +165,65 @@ struct TodayView: View {
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
-                ScrollView(.vertical) {
-                    LazyVStack(spacing: DS.sectionGap, pinnedViews: []) {
-                        if let message = viewModel.errorMessage {
-                            ErrorBanner(message: message)
+                ScrollView(.vertical, showsIndicators: true) {
+                    ZStack(alignment: .top) {
+                        ModernRefreshControl(coordinateSpace: "scroll") {
+                            await viewModel.load()
                         }
-
-                        if viewModel.isLoading && viewModel.weatherActivity == nil {
-                            weatherSectionHeader
-                            WeatherSkeleton()
-                        } else {
-                            weatherSection
-                        }
-
-                        if viewModel.isLoading && viewModel.digest == nil {
-                            digestSectionHeader
-                            DigestSkeleton()
-                        } else {
-                            digestSection
-                                .id("digest")
-                                .background(
-                                    RoundedRectangle(cornerRadius: DS.cardRadius, style: .continuous)
-                                        .fill(Color.orange.opacity(digestHighlighted ? 0.08 : 0))
-                                        .padding(-DS.sm)
-                                )
-                        }
-
-                        if !viewModel.isLoading || viewModel.summaryStats != nil {
-                            insightsSection
-                        }
-
-                        Section {
-                            historyHeaderView
-                            historyContentView
-                        }
-
-                        Section {
-                            itemsHeaderView
-                            if viewModel.isLoading && viewModel.items.isEmpty {
-                                ForEach(0..<3) { _ in
-                                    BookmarkSkeleton()
-                                }
-                            } else {
-                                itemsContentView
+                        
+                        LazyVStack(spacing: DS.sectionGap, pinnedViews: []) {
+                            if let message = viewModel.errorMessage {
+                                ErrorBanner(message: message)
                             }
+                            
+                            if viewModel.isLoading && viewModel.weatherActivity == nil {
+                                weatherSectionHeader
+                                WeatherSkeleton()
+                            } else {
+                                weatherSection
+                            }
+                            
+                            if viewModel.isLoading && viewModel.digest == nil {
+                                digestSectionHeader
+                                DigestSkeleton()
+                            } else {
+                                digestSection
+                                    .id("digest")
+                                    .background(
+                                        RoundedRectangle(cornerRadius: DS.cardRadius, style: .continuous)
+                                            .fill(Color.orange.opacity(digestHighlighted ? 0.08 : 0))
+                                            .padding(-DS.sm)
+                                    )
+                            }
+                            
+                            if !viewModel.isLoading || viewModel.summaryStats != nil {
+                                insightsSection
+                            }
+                            
+                            Section {
+                                historyHeaderView
+                                historyContentView
+                            }
+                            
+                            Section {
+                                itemsHeaderView
+                                if viewModel.isLoading && viewModel.items.isEmpty {
+                                    ForEach(0..<3) { _ in
+                                        BookmarkSkeleton()
+                                    }
+                                } else {
+                                    itemsContentView
+                                }
+                            }
+                            
+                            weatherDiagnosticsSection
                         }
-
-                        weatherDiagnosticsSection
+                        .padding(.horizontal, DS.pageH)
+                        .padding(.top, 20) // Give some space for refresh control
+                        .padding(.bottom, DS.xxl)
                     }
-                    .padding(.horizontal, DS.pageH)
-                    .padding(.bottom, DS.xxl)
-                    .frame(maxWidth: .infinity)
-                    .clipped()
                 }
+                .coordinateSpace(name: "scroll")
                 .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
                 .onChange(of: navigation.scrollToDigest) { _, shouldScroll in
                     guard shouldScroll else { return }
@@ -139,9 +241,6 @@ struct TodayView: View {
                 }
             }
             .background(AppBackground())
-            .refreshable {
-                await viewModel.load()
-            }
             .navigationTitle("XAuto")
             .task {
                 await viewModel.load()

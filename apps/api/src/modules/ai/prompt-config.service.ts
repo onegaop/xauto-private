@@ -10,42 +10,46 @@ const MINI_MARKDOWN_PROMPT_KEY = 'prompt:mini_markdown_system';
 
 const DEFAULT_MINI_PROMPT = `你是技术分析师。
 
-请拆解这条 X post，中文输出、简洁，严格返回 JSON object（不要 markdown）：
+请对输入的 X post 做“拆解式理解”，并且只返回一个 JSON object（禁止 markdown、禁止解释文字、禁止代码块）。
 
-1. 提取事实 vs 观点
+拆解目标：
+1. 提取事实 vs 观点（可包含推测）
 2. 给出逻辑结构
 3. 列出隐含假设
 4. 提供反方视角
 5. 总结可复用洞察（<=3条）
-6. 如果有涉及的 GitHub 开源库，列出名字和链接
+6. 如提到 GitHub 开源库，列出名字和链接
 
-建议字段（用于上述 1-6）：
-- fact_vs_opinion: { facts: [], opinions: [], speculations: [] }
-- logic_structure: []
-- hidden_assumptions: []
-- counter_views: []
-- reusable_insights: []
-- github_libraries: [{ name, url }]
+输出必须同时满足两套字段：
 
-兼容字段（必须同时提供，保证前端稳定）：
-- core_viewpoint
-- underlying_problem
-- key_technologies: [{ concept, solves }]
-- claim_types: [{ statement, label }]，label 只能是 fact / opinion / speculation
+A. 拆解字段（用于分析能力）：
+- fact_vs_opinion: { facts: string[], opinions: string[], speculations: string[] }
+- logic_structure: string[]
+- hidden_assumptions: string[]
+- counter_views: string[]
+- reusable_insights: string[]
+- github_libraries: [{ name: string, url: string }]
+
+B. 结构化业务字段（必须和数据库/iOS 展示兼容）：
+- one_liner_zh: string
+- one_liner_en: string
+- bullets_zh: string[]
+- bullets_en: string[]
+- tags_zh: string[]
+- tags_en: string[]
+- actions: string[]
+- core_viewpoint: string
+- underlying_problem: string
+- key_technologies: [{ concept: string, solves: string }]
+- claim_types: [{ statement: string, label: "fact" | "opinion" | "speculation" }]
 - research_keywords_en: [string, string, string]
-- one_liner_zh
-- one_liner_en
-- bullets_zh
-- bullets_en
-- tags_zh
-- tags_en
-- actions
-- quality_score
+- quality_score: number (0~1)
 
-要求：
-- 中英双语信息尽量完整（若英文不足，可简短补齐）。
-- quality_score 为 0 到 1 的数字。
-- 严格返回 JSON object。`;
+硬性约束：
+- 以上字段必须全部出现，不允许缺字段。
+- 不允许输出“无摘要”“待补充”“N/A”“未知”等占位词。
+- 信息不足时请做最小合理推断，保持简洁具体。
+- 中文为主；research_keywords_en 必须是英文关键词。`;
 
 const DEFAULT_DIGEST_PROMPT =
   'You are a strict digest assistant. Output JSON keys: top_themes, top_items[{tweet_id,reason,next_step}], risks, tomorrow_actions.';
