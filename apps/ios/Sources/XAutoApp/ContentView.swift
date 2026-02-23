@@ -1,5 +1,6 @@
 import SwiftUI
 import MarkdownUI
+import UIKit
 
 // MARK: - Design System
 
@@ -68,30 +69,60 @@ struct TodayView: View {
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(spacing: DS.sectionGap) {
+                ScrollView(.vertical) {
+                    LazyVStack(spacing: DS.sectionGap, pinnedViews: []) {
                         if let message = viewModel.errorMessage {
                             ErrorBanner(message: message)
                         }
 
-                        weatherSection
+                        if viewModel.isLoading && viewModel.weatherActivity == nil {
+                            weatherSectionHeader
+                            WeatherSkeleton()
+                        } else {
+                            weatherSection
+                        }
 
-                        digestSection
-                            .id("digest")
-                            .background(
-                                RoundedRectangle(cornerRadius: DS.cardRadius, style: .continuous)
-                                    .fill(Color.orange.opacity(digestHighlighted ? 0.08 : 0))
-                                    .padding(-DS.sm)
-                            )
+                        if viewModel.isLoading && viewModel.digest == nil {
+                            digestSectionHeader
+                            DigestSkeleton()
+                        } else {
+                            digestSection
+                                .id("digest")
+                                .background(
+                                    RoundedRectangle(cornerRadius: DS.cardRadius, style: .continuous)
+                                        .fill(Color.orange.opacity(digestHighlighted ? 0.08 : 0))
+                                        .padding(-DS.sm)
+                                )
+                        }
 
-                        insightsSection
-                        historySection
-                        itemsSection
+                        if !viewModel.isLoading || viewModel.summaryStats != nil {
+                            insightsSection
+                        }
+
+                        Section {
+                            historyHeaderView
+                            historyContentView
+                        }
+
+                        Section {
+                            itemsHeaderView
+                            if viewModel.isLoading && viewModel.items.isEmpty {
+                                ForEach(0..<3) { _ in
+                                    BookmarkSkeleton()
+                                }
+                            } else {
+                                itemsContentView
+                            }
+                        }
+
                         weatherDiagnosticsSection
                     }
                     .padding(.horizontal, DS.pageH)
                     .padding(.bottom, DS.xxl)
+                    .frame(maxWidth: .infinity)
+                    .clipped()
                 }
+                .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
                 .onChange(of: navigation.scrollToDigest) { _, shouldScroll in
                     guard shouldScroll else { return }
                     navigation.scrollToDigest = false
@@ -110,11 +141,6 @@ struct TodayView: View {
             .background(AppBackground())
             .refreshable {
                 await viewModel.load()
-            }
-            .overlay {
-                if viewModel.isLoading && viewModel.items.isEmpty {
-                    ProgressView()
-                }
             }
             .navigationTitle("XAuto")
             .task {
@@ -145,25 +171,29 @@ struct TodayView: View {
 
     // MARK: Weather
 
+    private var weatherSectionHeader: some View {
+        HStack(alignment: .firstTextBaseline) {
+            SectionHeader(title: "天气活动", subtitle: "WeatherKit + Foundation Models")
+            Spacer()
+            Button {
+                Task { await viewModel.refreshWeather() }
+            } label: {
+                if viewModel.isLoadingWeather {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
     private var weatherSection: some View {
         VStack(alignment: .leading, spacing: DS.md) {
-            HStack(alignment: .firstTextBaseline) {
-                SectionHeader(title: "天气活动", subtitle: "WeatherKit + Foundation Models")
-                Spacer()
-                Button {
-                    Task { await viewModel.refreshWeather() }
-                } label: {
-                    if viewModel.isLoadingWeather {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .buttonStyle(.plain)
-            }
+            weatherSectionHeader
 
             if let activity = viewModel.weatherActivity {
                 WeatherActivityCard(activity: activity)
@@ -204,9 +234,23 @@ struct TodayView: View {
 
     // MARK: Digest
 
-    private var digestSection: some View {
+    private var digestSectionHeader: some View {
         VStack(alignment: .leading, spacing: DS.md) {
             SectionHeader(title: "摘要", subtitle: "今日")
+            RuleNotesCard(
+                title: "展示规则",
+                notes: [
+                    "重点条目由 AI 从今日候选中筛选，最多 5 条。",
+                    "重点条目不等于最新条目；未入选仍会出现在「最新条目」。",
+                    "同一天重复生成 Daily Digest 会覆盖当天结果。"
+                ]
+            )
+        }
+    }
+
+    private var digestSection: some View {
+        VStack(alignment: .leading, spacing: DS.md) {
+            digestSectionHeader
 
             if let digest = viewModel.digest {
                 DigestHeroCard(digest: digest, title: "Today Digest")
@@ -320,7 +364,7 @@ struct TodayView: View {
 
     // MARK: History
 
-    private var historySection: some View {
+    private var historyHeaderView: some View {
         VStack(alignment: .leading, spacing: DS.md) {
             HStack(alignment: .firstTextBaseline) {
                 SectionHeader(title: "历史摘要")
@@ -337,71 +381,82 @@ struct TodayView: View {
                 }
             }
 
-            if viewModel.digestHistory.isEmpty {
-                EmptyStateCard(icon: "clock", title: "暂无历史摘要", detail: "点击下拉刷新后会加载最近摘要。")
-            } else {
-                ForEach(Array(viewModel.digestHistory.enumerated()), id: \.offset) { _, digest in
-                    Card {
-                        VStack(alignment: .leading, spacing: DS.sm) {
-                            HStack {
-                                Text(digest.periodKey.isEmpty ? "未知周期" : digest.periodKey)
-                                    .font(.subheadline.weight(.semibold))
-                                Spacer()
-                                let digestTime = digest.generatedAt.isEmpty ? (digest.updatedAt ?? digest.createdAt ?? "") : digest.generatedAt
-                                if !digestTime.isEmpty {
-                                    Text(relativeDate(digestTime))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
+            RuleNotesCard(
+                title: "历史卡片规则",
+                notes: [
+                    "每张历史摘要卡片只展示 topItems 前 2 条。",
+                    "完整重点条目以当前期 Digest 的 topItems 为准。"
+                ]
+            )
+        }
+    }
 
-                            if !digest.topThemes.isEmpty {
-                                TagFlow(tags: digest.topThemes.prefix(4).map { $0 })
-                            }
-
-                            if !digest.topItems.isEmpty {
-                                ForEach(digest.topItems.prefix(2)) { topItem in
-                                    Button {
-                                        selectedTweetRoute = TweetRoute(tweetId: topItem.tweetId)
-                                    } label: {
-                                        TopItemRow(item: topItem)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            } else if digest.topThemes.isEmpty {
-                                Text("该摘要暂无内容")
-                                    .font(.footnote)
+    @ViewBuilder
+    private var historyContentView: some View {
+        if viewModel.digestHistory.isEmpty {
+            EmptyStateCard(icon: "clock", title: "暂无历史摘要", detail: "点击下拉刷新后会加载最近摘要。")
+        } else {
+            ForEach(Array(viewModel.digestHistory.enumerated()), id: \.offset) { _, digest in
+                Card {
+                    VStack(alignment: .leading, spacing: DS.sm) {
+                        HStack {
+                            Text(digest.periodKey.isEmpty ? "未知周期" : digest.periodKey)
+                                .font(.subheadline.weight(.semibold))
+                            Spacer()
+                            let digestTime = digest.generatedAt.isEmpty ? (digest.updatedAt ?? digest.createdAt ?? "") : digest.generatedAt
+                            if !digestTime.isEmpty {
+                                Text(relativeDate(digestTime))
+                                    .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                         }
-                    }
-                }
 
-                if viewModel.canLoadMoreHistory {
-                    Button {
-                        Task { await viewModel.loadMoreHistory() }
-                    } label: {
-                        HStack(spacing: DS.sm) {
-                            if viewModel.isLoadingHistoryMore {
-                                ProgressView()
-                                    .controlSize(.small)
-                            }
-                            Text(viewModel.isLoadingHistoryMore ? "加载中..." : "加载更多历史")
-                                .font(.subheadline.weight(.medium))
+                        if !digest.topThemes.isEmpty {
+                            TagFlow(tags: digest.topThemes.prefix(4).map { $0 })
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, DS.md)
+
+                        if !digest.topItems.isEmpty {
+                            ForEach(digest.topItems.prefix(2)) { topItem in
+                                Button {
+                                    selectedTweetRoute = TweetRoute(tweetId: topItem.tweetId)
+                                } label: {
+                                    TopItemRow(item: topItem)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        } else if digest.topThemes.isEmpty {
+                            Text("该摘要暂无内容")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.orange)
                 }
+            }
+
+            if viewModel.canLoadMoreHistory {
+                Button {
+                    Task { await viewModel.loadMoreHistory() }
+                } label: {
+                    HStack(spacing: DS.sm) {
+                        if viewModel.isLoadingHistoryMore {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                        Text(viewModel.isLoadingHistoryMore ? "加载中..." : "加载更多历史")
+                            .font(.subheadline.weight(.medium))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, DS.md)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.orange)
             }
         }
     }
 
     // MARK: Items
 
-    private var itemsSection: some View {
+    private var itemsHeaderView: some View {
         VStack(alignment: .leading, spacing: DS.md) {
             SectionHeader(title: "最新条目", subtitle: "\(viewModel.items.count) 条")
 
@@ -475,40 +530,43 @@ struct TodayView: View {
                 }
                 .tint(.secondary)
             }
+        }
+    }
 
-            if viewModel.items.isEmpty && !viewModel.isLoading {
-                EmptyStateCard(icon: "tray", title: "暂无条目", detail: "试试放宽筛选条件或先同步书签。")
-            } else {
-                ForEach(viewModel.items) { item in
-                    Button {
-                        selectedTweetRoute = TweetRoute(tweetId: item.tweetId)
-                    } label: {
-                        BookmarkRow(item: item)
-                    }
-                    .buttonStyle(.plain)
-                    .task {
-                        await viewModel.loadMoreIfNeeded(currentItem: item)
-                    }
+    @ViewBuilder
+    private var itemsContentView: some View {
+        if viewModel.items.isEmpty && !viewModel.isLoading {
+            EmptyStateCard(icon: "tray", title: "暂无条目", detail: "试试放宽筛选条件或先同步书签。")
+        } else {
+            ForEach(viewModel.items) { item in
+                Button {
+                    selectedTweetRoute = TweetRoute(tweetId: item.tweetId)
+                } label: {
+                    BookmarkRow(item: item)
                 }
+                .buttonStyle(.plain)
+                .task {
+                    await viewModel.loadMoreIfNeeded(currentItem: item)
+                }
+            }
 
-                if viewModel.canLoadMoreItems {
-                    Button {
-                        Task { await viewModel.loadMoreItems() }
-                    } label: {
-                        HStack(spacing: DS.sm) {
-                            if viewModel.isLoadingMore {
-                                ProgressView()
-                                    .controlSize(.small)
-                            }
-                            Text(viewModel.isLoadingMore ? "加载中..." : "加载更多")
-                                .font(.subheadline.weight(.medium))
+            if viewModel.canLoadMoreItems {
+                Button {
+                    Task { await viewModel.loadMoreItems() }
+                } label: {
+                    HStack(spacing: DS.sm) {
+                        if viewModel.isLoadingMore {
+                            ProgressView()
+                                .controlSize(.small)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, DS.md)
+                        Text(viewModel.isLoadingMore ? "加载中..." : "加载更多")
+                            .font(.subheadline.weight(.medium))
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, DS.md)
                 }
+                .buttonStyle(.plain)
+                .foregroundStyle(.orange)
             }
         }
     }
@@ -531,7 +589,7 @@ struct WeekView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
+            ScrollView(.vertical) {
                 VStack(spacing: DS.sectionGap) {
                     if let message = viewModel.errorMessage {
                         ErrorBanner(message: message)
@@ -595,7 +653,10 @@ struct WeekView: View {
                 }
                 .padding(.horizontal, DS.pageH)
                 .padding(.bottom, DS.xxl)
+                .frame(maxWidth: .infinity)
+                .clipped()
             }
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
             .background(AppBackground())
             .refreshable {
                 await viewModel.load()
@@ -621,6 +682,8 @@ struct WeekView: View {
 struct ItemDetailView: View {
     @StateObject private var viewModel: ItemDetailViewModel
     @State private var activeWebURL: URL?
+    @State private var copiedKeyword: String?
+    @State private var copiedKeywordsHint: String?
     @Environment(\.openURL) private var openURL
 
     init(seed: BookmarkItemResponse) {
@@ -628,7 +691,7 @@ struct ItemDetailView: View {
     }
 
     var body: some View {
-        ScrollView {
+        ScrollView(.vertical) {
             VStack(spacing: DS.lg) {
                 Card {
                     VStack(alignment: .leading, spacing: DS.md) {
@@ -737,8 +800,20 @@ struct ItemDetailView: View {
                                     .font(.headline)
                                 ForEach(summary.keyTechnologies) { item in
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(item.concept)
-                                            .font(.subheadline.weight(.medium))
+                                        Button {
+                                            openGoogleAISearch(for: item.concept)
+                                        } label: {
+                                            HStack(spacing: DS.xs) {
+                                                Text(item.concept)
+                                                    .font(.subheadline.weight(.semibold))
+                                                    .underline()
+                                                Image(systemName: "arrow.up.right.square")
+                                                    .font(.caption2)
+                                            }
+                                            .foregroundStyle(.blue)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                        }
+                                        .buttonStyle(.plain)
                                         Text(item.solves)
                                             .font(.footnote)
                                             .foregroundStyle(.secondary)
@@ -779,7 +854,22 @@ struct ItemDetailView: View {
                             VStack(alignment: .leading, spacing: DS.sm) {
                                 Text("研究关键词")
                                     .font(.headline)
-                                TagFlow(tags: summary.researchKeywordsEn)
+                                KeywordLinkFlow(
+                                    keywords: summary.researchKeywordsEn,
+                                    copiedKeyword: copiedKeyword
+                                ) { keyword in
+                                    openGoogleAISearch(for: keyword)
+                                } onCopy: { keyword in
+                                    copyResearchKeyword(keyword)
+                                }
+                                if let copiedKeywordsHint, !copiedKeywordsHint.isEmpty {
+                                    Text(copiedKeywordsHint)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Text("点击关键词会尝试打开 Google AI 搜索（不可用时回退普通搜索）。")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -831,7 +921,10 @@ struct ItemDetailView: View {
             }
             .padding(.horizontal, DS.pageH)
             .padding(.vertical, DS.lg)
+            .frame(maxWidth: .infinity)
+            .clipped()
         }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .background(AppBackground())
         .navigationTitle("Detail")
         .toolbar {
@@ -905,6 +998,49 @@ struct ItemDetailView: View {
         guard candidate.allSatisfy(\.isNumber) else { return nil }
         return candidate
     }
+
+    private func openGoogleAISearch(for keyword: String) {
+        guard let url = googleAISearchURL(for: keyword) else {
+            return
+        }
+        openURL(url) { accepted in
+            if !accepted {
+                activeWebURL = url
+            }
+        }
+    }
+
+    private func googleAISearchURL(for keyword: String) -> URL? {
+        let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return nil
+        }
+
+        var components = URLComponents(string: "https://www.google.com/search")
+        components?.queryItems = [
+            URLQueryItem(name: "q", value: trimmed),
+            URLQueryItem(name: "udm", value: "50")
+        ]
+        return components?.url
+    }
+
+    private func copyResearchKeyword(_ keyword: String) {
+        let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        UIPasteboard.general.string = trimmed
+        copiedKeyword = trimmed
+        copiedKeywordsHint = "已复制：\(trimmed)"
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            if copiedKeyword == trimmed {
+                copiedKeyword = nil
+            }
+            if copiedKeywordsHint == "已复制：\(trimmed)" {
+                copiedKeywordsHint = nil
+            }
+        }
+    }
+
 }
 
 // MARK: - Item Loader
@@ -947,6 +1083,8 @@ struct ItemLoaderView: View {
 // MARK: - Settings
 
 struct SettingsView: View {
+    @Environment(\.openURL) private var openURL
+
     @AppStorage(XAutoSharedKeys.apiBase, store: UserDefaults(suiteName: XAutoSharedKeys.appGroupID))
     private var apiBase = XAutoSharedKeys.defaultAPIBase
 
@@ -987,6 +1125,18 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                Section("Google") {
+                    Button {
+                        openGoogleLoginInSafari()
+                    } label: {
+                        Label("Google 预登录（Safari）", systemImage: "person.crop.circle.badge.checkmark")
+                    }
+
+                    Text("先建立 Google 登录态。关键词搜索会优先外跳 Safari，命中 AI 模式更稳定。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("Actions") {
                     Button {
                         Task { await viewModel.testConnection() }
@@ -1014,9 +1164,122 @@ struct SettingsView: View {
             .navigationTitle("Settings")
         }
     }
+
+    private func openGoogleLoginInSafari() {
+        guard let url = googleLoginURL() else { return }
+        openURL(url)
+    }
 }
 
 // MARK: - Foundation Components
+
+private struct SkeletonView: View {
+    @State private var isAnimating = false
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 4)
+            .fill(Color.primary.opacity(0.08))
+            .overlay(
+                GeometryReader { proxy in
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .white.opacity(0.4), location: 0.5),
+                            .init(color: .clear, location: 1)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: proxy.size.width * 0.3)
+                    .offset(x: isAnimating ? proxy.size.width : -proxy.size.width * 0.3)
+                }
+            )
+            .clipped()
+            .onAppear {
+                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                    isAnimating = true
+                }
+            }
+    }
+}
+
+private struct WeatherSkeleton: View {
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: DS.md) {
+                HStack(spacing: DS.md) {
+                    SkeletonView()
+                        .frame(width: 36, height: 36)
+                    VStack(alignment: .leading, spacing: 6) {
+                        SkeletonView().frame(width: 120, height: 18)
+                        SkeletonView().frame(width: 80, height: 12)
+                    }
+                    Spacer()
+                    SkeletonView().frame(width: 60, height: 20)
+                }
+                SkeletonView().frame(height: 16)
+                SkeletonView().frame(width: 200, height: 16)
+            }
+        }
+    }
+}
+
+private struct DigestSkeleton: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.md) {
+            Card {
+                VStack(alignment: .leading, spacing: DS.md) {
+                    HStack {
+                        SkeletonView().frame(width: 100, height: 22)
+                        Spacer()
+                        SkeletonView().frame(width: 60, height: 14)
+                    }
+                    HStack(spacing: DS.sm) {
+                        ForEach(0..<3) { _ in
+                            SkeletonView().frame(width: 50, height: 24)
+                        }
+                    }
+                }
+            }
+            VStack(alignment: .leading, spacing: DS.md) {
+                SkeletonView().frame(width: 80, height: 20)
+                ForEach(0..<3) { _ in
+                    HStack(spacing: DS.md) {
+                        SkeletonView().frame(width: 3, height: 40)
+                        VStack(alignment: .leading, spacing: 6) {
+                            SkeletonView().frame(height: 16)
+                            SkeletonView().frame(width: 150, height: 12)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct BookmarkSkeleton: View {
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: DS.sm) {
+                HStack(spacing: DS.sm) {
+                    SkeletonView().frame(width: 24, height: 24)
+                        .clipShape(Circle())
+                    SkeletonView().frame(width: 100, height: 16)
+                    Spacer()
+                    SkeletonView().frame(width: 60, height: 12)
+                }
+                SkeletonView().frame(height: 16)
+                SkeletonView().frame(height: 16)
+                SkeletonView().frame(width: 200, height: 16)
+                HStack {
+                    SkeletonView().frame(width: 40, height: 12)
+                    Spacer()
+                    SkeletonView().frame(width: 80, height: 12)
+                }
+            }
+        }
+    }
+}
 
 private struct AppBackground: View {
     var body: some View {
@@ -1275,6 +1538,58 @@ private struct TagFlow: View {
     }
 }
 
+private struct KeywordLinkFlow: View {
+    let keywords: [String]
+    let copiedKeyword: String?
+    let onTap: (String) -> Void
+    let onCopy: (String) -> Void
+
+    var body: some View {
+        FlowWrapLayout(spacing: DS.sm, rowSpacing: DS.sm) {
+            ForEach(keywords, id: \.self) { keyword in
+                HStack(spacing: DS.xs) {
+                    Button {
+                        onTap(keyword)
+                    } label: {
+                        HStack(spacing: DS.xs) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.caption2.weight(.semibold))
+                            Text(keyword)
+                                .font(.caption.weight(.medium))
+                                .underline()
+                        }
+                        .padding(.horizontal, DS.md)
+                        .padding(.vertical, 6)
+                        .foregroundStyle(.blue)
+                        .background(Color.blue.opacity(0.08), in: Capsule())
+                        .overlay(
+                            Capsule()
+                                .stroke(Color.blue.opacity(0.25), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        onCopy(keyword)
+                    } label: {
+                        Image(systemName: copiedKeyword == keyword ? "checkmark" : "doc.on.doc")
+                            .font(.caption2.weight(.semibold))
+                            .padding(7)
+                            .foregroundStyle(copiedKeyword == keyword ? .green : .orange)
+                            .background(Color.orange.opacity(0.08), in: Circle())
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.orange.opacity(0.25), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 private struct MarkdownTextBlock: View {
     let markdown: String
 
@@ -1513,6 +1828,33 @@ private struct EmptyStateCard: View {
     }
 }
 
+private struct RuleNotesCard: View {
+    let title: String
+    let notes: [String]
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: DS.sm) {
+                Label(title, systemImage: "info.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.orange)
+                ForEach(notes, id: \.self) { note in
+                    HStack(alignment: .top, spacing: DS.sm) {
+                        Circle()
+                            .fill(Color.orange.opacity(0.9))
+                            .frame(width: 4, height: 4)
+                            .padding(.top, 7)
+                        Text(note)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Utilities
 
 private func claimLabelTitle(_ raw: String) -> String {
@@ -1537,4 +1879,13 @@ private func timeString(_ date: Date) -> String {
     formatter.locale = Locale(identifier: "zh_CN")
     formatter.dateFormat = "HH:mm"
     return formatter.string(from: date)
+}
+
+private func googleLoginURL() -> URL? {
+    var components = URLComponents(string: "https://accounts.google.com/ServiceLogin")
+    components?.queryItems = [
+        URLQueryItem(name: "continue", value: "https://www.google.com/?hl=zh-CN"),
+        URLQueryItem(name: "hl", value: "zh-CN")
+    ]
+    return components?.url
 }
