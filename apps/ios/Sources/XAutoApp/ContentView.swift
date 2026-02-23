@@ -56,7 +56,6 @@ struct TodayView: View {
                         historySection
                         itemsSection
                     }
-                    .containerRelativeFrame(.horizontal)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
@@ -471,7 +470,6 @@ struct WeekView: View {
                             )
                         }
                     }
-                    .containerRelativeFrame(.horizontal)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                 }
@@ -1156,9 +1154,7 @@ private struct VerticalOnlyScrollConfigurator: UIViewRepresentable {
             if let scrollView = candidate as? UIScrollView {
                 scrollView.alwaysBounceHorizontal = false
                 scrollView.isDirectionalLockEnabled = true
-                if scrollView.contentOffset.x != 0 {
-                    scrollView.setContentOffset(CGPoint(x: 0, y: scrollView.contentOffset.y), animated: false)
-                }
+                scrollView.showsHorizontalScrollIndicator = false
                 return
             }
             current = candidate
