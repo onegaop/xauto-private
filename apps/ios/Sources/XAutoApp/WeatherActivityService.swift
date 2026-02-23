@@ -181,9 +181,6 @@ private final class DeviceLocationProvider: NSObject, CLLocationManagerDelegate 
     }
 
     func requestCurrentLocation() async throws -> CLLocation {
-        guard CLLocationManager.locationServicesEnabled() else {
-            throw DeviceLocationError.servicesDisabled
-        }
         guard continuation == nil else {
             throw DeviceLocationError.busy
         }

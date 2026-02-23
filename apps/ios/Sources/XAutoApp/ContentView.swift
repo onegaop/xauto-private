@@ -48,35 +48,28 @@ struct TodayView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                AppBackground()
-                List {
-                    VStack(spacing: 16) {
-                        if let message = viewModel.errorMessage {
-                            ErrorCard(message: message)
-                        }
-
-                        weatherSection
-                        digestSection
-                        insightsSection
-                        historySection
-                        itemsSection
-                        weatherDiagnosticsSection
+            ScrollView {
+                VStack(spacing: 16) {
+                    if let message = viewModel.errorMessage {
+                        ErrorCard(message: message)
                     }
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-                    .padding(.bottom, 24)
-                    .listRowInsets(EdgeInsets())
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .refreshable {
-                    await viewModel.load()
-                }
 
+                    weatherSection
+                    digestSection
+                    insightsSection
+                    historySection
+                    itemsSection
+                    weatherDiagnosticsSection
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 24)
+            }
+            .background(AppBackground())
+            .refreshable {
+                await viewModel.load()
+            }
+            .overlay {
                 if viewModel.isLoading && viewModel.items.isEmpty {
                     ProgressView("Loading...")
                 }
