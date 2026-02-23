@@ -13,6 +13,35 @@ type DigestTopItem = { tweetId: string; reason: string; nextStep: string };
 
 @Injectable()
 export class MobileService {
+  private static readonly RESEARCH_KEYWORD_BLOCKLIST = new Set([
+    'x-post-analysis',
+    'analysis',
+    'research',
+    'keyword',
+    'keywords',
+    'summary',
+    'summaries',
+    'insight',
+    'insights',
+    'topic',
+    'topics',
+    'model-retry',
+    'summary-fallback',
+    'system-fallback',
+    'http',
+    'https',
+    'www',
+    'com',
+    'org',
+    'net',
+    't.co',
+    'uncategorized',
+    'unknown',
+    'none',
+    'n-a',
+    'na'
+  ]);
+
   constructor(
     @InjectModel(BookmarkItem.name)
     private readonly bookmarkItemModel: Model<BookmarkItemDocument>,
@@ -115,7 +144,7 @@ export class MobileService {
             { $unwind: { path: '$researchKeywordsEn', preserveNullAndEmptyArrays: false } },
             { $group: { _id: '$researchKeywordsEn', count: { $sum: 1 } } },
             { $sort: { count: -1, _id: 1 } },
-            { $limit: 10 }
+            { $limit: 50 }
           ]
         }
       }
@@ -129,6 +158,7 @@ export class MobileService {
     } | undefined;
 
     const totals = facet?.totals?.[0];
+    const topResearchKeywords = this.filterTopResearchKeywords(facet?.topResearchKeywords ?? []);
 
     return {
       range,
@@ -145,7 +175,7 @@ export class MobileService {
         label: item._id,
         count: item.count
       })),
-      topResearchKeywords: (facet?.topResearchKeywords ?? []).map((item) => ({
+      topResearchKeywords: topResearchKeywords.map((item) => ({
         keyword: item._id,
         count: item.count
       }))
@@ -278,6 +308,56 @@ export class MobileService {
     }
 
     return Math.min(50, Math.max(1, Math.trunc(parsed)));
+  }
+
+  private filterTopResearchKeywords(
+    rows: Array<{ _id: string; count: number }>
+  ): Array<{ _id: string; count: number }> {
+    const output: Array<{ _id: string; count: number }> = [];
+    const seen = new Set<string>();
+
+    for (const row of rows) {
+      const normalized = this.normalizeResearchKeyword(row._id);
+      if (!normalized) {
+        continue;
+      }
+      if (seen.has(normalized)) {
+        continue;
+      }
+
+      seen.add(normalized);
+      output.push({ _id: normalized, count: row.count });
+      if (output.length >= 10) {
+        break;
+      }
+    }
+
+    return output;
+  }
+
+  private normalizeResearchKeyword(value: string): string | null {
+    let normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    normalized = normalized.replace(/^#/, '');
+    normalized = normalized.replace(/https?:\/\/\S+/g, ' ');
+    normalized = normalized.replace(/[^\x00-\x7F]/g, ' ');
+    normalized = normalized.replace(/[^a-z0-9+._/\-\s]/g, ' ');
+    normalized = normalized.replace(/\s+/g, '-');
+    normalized = normalized.replace(/-+/g, '-').replace(/^-|-$/g, '');
+
+    if (!normalized || normalized.length < 3 || normalized.length > 40) {
+      return null;
+    }
+    if (!/[a-z]/.test(normalized)) {
+      return null;
+    }
+    if (MobileService.RESEARCH_KEYWORD_BLOCKLIST.has(normalized)) {
+      return null;
+    }
+    return normalized;
   }
 
   private decodeDigestCursor(cursor?: string): { generatedAt: Date; id: string } | null {

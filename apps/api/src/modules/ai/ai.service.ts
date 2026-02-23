@@ -41,6 +41,70 @@ export type DigestResult = {
 
 @Injectable()
 export class AiService {
+  private static readonly RESEARCH_KEYWORD_BLOCKLIST = new Set([
+    'x-post-analysis',
+    'post-analysis',
+    'analysis',
+    'research',
+    'keyword',
+    'keywords',
+    'summary',
+    'summaries',
+    'insight',
+    'insights',
+    'topic',
+    'topics',
+    'model-retry',
+    'summary-fallback',
+    'system-fallback',
+    'http',
+    'https',
+    'www',
+    'com',
+    'org',
+    'net',
+    't.co',
+    'uncategorized',
+    'unknown',
+    'n-a',
+    'na',
+    'none'
+  ]);
+
+  private static readonly RESEARCH_KEYWORD_STOPWORDS = new Set([
+    'a',
+    'an',
+    'and',
+    'are',
+    'as',
+    'at',
+    'be',
+    'by',
+    'for',
+    'from',
+    'how',
+    'in',
+    'is',
+    'it',
+    'of',
+    'on',
+    'or',
+    'that',
+    'the',
+    'this',
+    'to',
+    'was',
+    'we',
+    'with',
+    'you',
+    'your',
+    'key',
+    'point',
+    'post',
+    'tweet',
+    'thread'
+  ]);
+
   constructor(
     private readonly providerConfigService: ProviderConfigService,
     private readonly budgetService: BudgetService,
@@ -65,7 +129,7 @@ export class AiService {
           }
         ]);
 
-        const normalized = this.normalizeMini(response, provider.provider, provider.miniModel);
+        const normalized = this.normalizeMini(response, provider.provider, provider.miniModel, item.text);
         this.assertMiniSummaryShape(normalized);
         await this.budgetService.recordUsageCny(this.estimateMiniCost(item.text));
         const renderMarkdown = await this.generateMiniMarkdown(item, normalized, provider).catch(() =>
@@ -95,7 +159,7 @@ export class AiService {
       underlyingProblem: '当前无法稳定获取结构化结果，需要稍后重试。',
       keyTechnologies: [],
       claimTypes: [],
-      researchKeywordsEn: ['model-retry', 'summary-fallback', 'x-post-analysis'],
+      researchKeywordsEn: [],
       qualityScore: 0.2,
       provider: fallbackProvider,
       model: 'fallback'
@@ -278,7 +342,12 @@ export class AiService {
     throw lastError instanceof Error ? lastError : new Error('Model call failed after retries');
   }
 
-  private normalizeMini(payload: Record<string, unknown>, provider: ProviderName, model: string): SummaryResult {
+  private normalizeMini(
+    payload: Record<string, unknown>,
+    provider: ProviderName,
+    model: string,
+    sourceText: string
+  ): SummaryResult {
     const oneLinerZhRaw = String(
       this.pickFromPayload(payload, ['one_liner_zh', 'summary_zh', '核心观点', 'core_viewpoint']) ?? ''
     ).trim();
@@ -347,9 +416,9 @@ export class AiService {
     );
 
     const parsedTagsEn = this.toStringList(this.pickFromPayload(payload, ['tags_en']));
-    let researchKeywordsEn = this.takeUniqueStrings(
+    let researchKeywordsEn = this.normalizeResearchKeywords(
       this.toStringList(this.pickFromPayload(payload, ['research_keywords_en', 'research_keywords', '英文关键词'])),
-      6
+      3
     );
 
     const tagsZh = this.takeUniqueStrings(
@@ -370,9 +439,12 @@ export class AiService {
     }
 
     if (researchKeywordsEn.length === 0) {
-      researchKeywordsEn = tagsEn.length > 0
-        ? this.takeUniqueStrings(tagsEn.map((item) => item.replace(/\s+/g, '-').toLowerCase()), 3)
-        : ['x-post-analysis'];
+      researchKeywordsEn = this.deriveResearchKeywords({
+        sourceText,
+        tagsEn,
+        keyTechnologies,
+        githubLibraries
+      });
     }
 
     const actions = this.takeUniqueStrings(
@@ -659,6 +731,88 @@ export class AiService {
     }
 
     return output;
+  }
+
+  private normalizeResearchKeywords(values: string[], limit: number): string[] {
+    const output: string[] = [];
+    const seen = new Set<string>();
+
+    for (const value of values) {
+      const normalized = this.normalizeResearchKeyword(value);
+      if (!normalized) {
+        continue;
+      }
+      if (seen.has(normalized)) {
+        continue;
+      }
+
+      seen.add(normalized);
+      output.push(normalized);
+      if (output.length >= limit) {
+        break;
+      }
+    }
+
+    return output;
+  }
+
+  private normalizeResearchKeyword(value: string): string | null {
+    let normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    normalized = normalized.replace(/^#/, '');
+    normalized = normalized.replace(/https?:\/\/\S+/g, ' ');
+    normalized = normalized.replace(/[^\x00-\x7F]/g, ' ');
+    normalized = normalized.replace(/[^a-z0-9+._/\-\s]/g, ' ');
+    normalized = normalized.replace(/\s+/g, '-');
+    normalized = normalized.replace(/-+/g, '-').replace(/^-|-$/g, '');
+
+    if (!normalized || normalized.length < 3 || normalized.length > 40) {
+      return null;
+    }
+    if (!/[a-z]/.test(normalized)) {
+      return null;
+    }
+    if (AiService.RESEARCH_KEYWORD_BLOCKLIST.has(normalized)) {
+      return null;
+    }
+
+    const parts = normalized.split(/[-._/+]/).filter(Boolean);
+    if (parts.length === 0) {
+      return null;
+    }
+
+    if (parts.every((part) => AiService.RESEARCH_KEYWORD_STOPWORDS.has(part))) {
+      return null;
+    }
+
+    return normalized;
+  }
+
+  private deriveResearchKeywords(input: {
+    sourceText: string;
+    tagsEn: string[];
+    keyTechnologies: Array<{ concept: string; solves: string }>;
+    githubLibraries: string[];
+  }): string[] {
+    const githubNames = input.githubLibraries.map((item) => item.split('(')[0]?.trim() ?? item.trim());
+    const hashtagKeywords = this.extractHashtagKeywords(input.sourceText);
+
+    const candidates = [
+      ...input.tagsEn,
+      ...input.keyTechnologies.map((item) => item.concept),
+      ...githubNames,
+      ...hashtagKeywords
+    ];
+
+    return this.normalizeResearchKeywords(candidates, 3);
+  }
+
+  private extractHashtagKeywords(text: string): string[] {
+    const matches = text.match(/#[A-Za-z][A-Za-z0-9_+\-]{1,32}/g) ?? [];
+    return matches.map((item) => item.replace(/^#/, ''));
   }
 
   private toClaimLabel(input: unknown): 'fact' | 'opinion' | 'speculation' {

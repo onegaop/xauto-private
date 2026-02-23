@@ -78,7 +78,7 @@ enum LocalFunInsightService {
         let firstSentence = firstReadableSentence(in: normalized)
         let mainLine = nonEmpty(core) ?? nonEmpty(summary?.oneLinerZh) ?? firstSentence
         let firstAction = summary?.actions.first ?? "补齐背景与证据后再决策"
-        let firstKeyword = summary?.researchKeywordsEn.first ?? "x-post-analysis"
+        let firstKeyword = summary?.researchKeywordsEn.first ?? "primary-topic"
         let firstClaim = summary?.claimTypes.first?.statement ?? mainLine
 
         switch mode {

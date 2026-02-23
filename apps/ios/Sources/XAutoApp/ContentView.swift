@@ -948,13 +948,14 @@ struct ItemDetailView: View {
                         }
                     }
 
-                    if !summary.researchKeywordsEn.isEmpty {
+                    let displayResearchKeywords = sanitizedResearchKeywords(summary.researchKeywordsEn)
+                    if !displayResearchKeywords.isEmpty {
                         Card {
                             VStack(alignment: .leading, spacing: DS.sm) {
                                 Text("研究关键词")
                                     .font(.headline)
                                 KeywordLinkFlow(
-                                    keywords: summary.researchKeywordsEn,
+                                    keywords: displayResearchKeywords,
                                     copiedKeyword: copiedKeyword
                                 ) { keyword in
                                     openGoogleAISearch(for: keyword)
@@ -1155,6 +1156,54 @@ struct ItemDetailView: View {
                 copiedKeywordsHint = nil
             }
         }
+    }
+
+    private func sanitizedResearchKeywords(_ keywords: [String]) -> [String] {
+        let blocked = Set([
+            "x-post-analysis",
+            "analysis",
+            "research",
+            "keyword",
+            "keywords",
+            "summary",
+            "summaries",
+            "insight",
+            "insights",
+            "topic",
+            "topics",
+            "model-retry",
+            "summary-fallback",
+            "system-fallback",
+            "uncategorized",
+            "unknown",
+            "none",
+            "na",
+            "n-a"
+        ])
+
+        var output: [String] = []
+        var seen = Set<String>()
+        for keyword in keywords {
+            let normalized = keyword
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: " ", with: "-")
+
+            if normalized.isEmpty || blocked.contains(normalized) {
+                continue
+            }
+            if seen.contains(normalized) {
+                continue
+            }
+
+            seen.insert(normalized)
+            output.append(normalized)
+            if output.count >= 6 {
+                break
+            }
+        }
+
+        return output
     }
 
 }
