@@ -61,6 +61,7 @@ struct TodayView: View {
                         insightsSection
                         historySection
                         itemsSection
+                        weatherDiagnosticsSection
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
@@ -110,13 +111,6 @@ struct TodayView: View {
 
                 if let activity = viewModel.weatherActivity {
                     WeatherActivityCard(activity: activity)
-                    if let weatherErrorMessage = viewModel.weatherErrorMessage, !weatherErrorMessage.isEmpty {
-                        Text("最近一次刷新失败：\(weatherErrorMessage)")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
                 } else if viewModel.isLoadingWeather {
                     GlassCard {
                         HStack(spacing: 10) {
@@ -126,9 +120,25 @@ struct TodayView: View {
                     }
                 }
             } else if let weatherErrorMessage = viewModel.weatherErrorMessage {
-                EmptyStateCard(title: "天气暂不可用", detail: weatherErrorMessage)
+                EmptyStateCard(title: "天气暂不可用", detail: "详细原因请看页面下方「天气诊断」。")
             } else {
                 EmptyStateCard(title: "暂无天气卡片", detail: "下拉刷新或点击右上角刷新天气。")
+            }
+        }
+    }
+
+    private var weatherDiagnosticsSection: some View {
+        Group {
+            if let weatherErrorMessage = viewModel.weatherErrorMessage, !weatherErrorMessage.isEmpty {
+                GlassCard {
+                    VStack(alignment: .leading, spacing: 8) {
+                        SectionTitle(title: "天气诊断", subtitle: "最近一次天气刷新异常")
+                        Text(weatherErrorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
             }
         }
     }

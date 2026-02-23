@@ -69,18 +69,37 @@ enum WeatherActivityService {
 
     static func friendlyErrorMessage(for error: Error) -> String {
         if let locationError = error as? DeviceLocationError {
-            return locationError.localizedDescription
+            return """
+            定位失败：\(locationError.localizedDescription)
+            建议：确认系统已开启定位、允许 XAuto 使用定位，并在网络稳定后重试。
+            """
         }
 
-        let lowercased = "\(error.localizedDescription) \((error as NSError).domain)".lowercased()
+        let nsError = error as NSError
+        let lowercased = "\(error.localizedDescription) \(nsError.domain) \(nsError.userInfo)".lowercased()
+        let technical = "技术信息：\(nsError.domain) (code \(nsError.code))"
+
         if lowercased.contains("weatherdaemon") || lowercased.contains("wdsjwt") || lowercased.contains("authenticator") {
-            return "WeatherKit 当前暂不可用（系统天气服务鉴权失败）。请在真机联网后重试，模拟器中也可能偶发此错误。"
+            return """
+            WeatherKit 鉴权失败，系统没有签发可用天气令牌。
+            常见原因：模拟器环境限制、签名/Capability 未生效、网络或系统时间异常。
+            建议：优先用真机重试；确认 App ID 与 Profile 含 WeatherKit；必要时重装 App。
+            \(technical)
+            """
         }
-        if lowercased.contains("network") || lowercased.contains("offline") || lowercased.contains("timed out") {
-            return "网络不稳定，天气数据拉取失败，请稍后重试。"
+        if lowercased.contains("network") || lowercased.contains("offline") || lowercased.contains("timed out") || lowercased.contains("cannot find host") {
+            return """
+            天气请求失败，当前网络不可达或超时。
+            建议：切换网络后重试，避免代理/防火墙拦截 Apple 天气服务。
+            \(technical)
+            """
         }
 
-        return "天气服务暂不可用，请稍后重试。"
+        return """
+        天气服务暂不可用，请稍后重试。
+        原因：\(error.localizedDescription)
+        \(technical)
+        """
     }
 
     private static func cache(_ snapshot: WeatherRawSnapshot) {
