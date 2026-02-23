@@ -1,0 +1,15 @@
+{
+  "originHash" : "e3caa60f4ba98632aebb6c59e74b2d6fcd944e2f5660568ddbc7191aeca5bc9d",
+  "pins" : [
+    {
+      "identity" : "atributika",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/psharanda/Atributika.git",
+      "state" : {
+        "revision" : "2de3536009a6f9ba88344a612ed219e2eb99ca2f",
+        "version" : "5.0.5"
+      }
+    }
+  ],
+  "version" : 3
+}

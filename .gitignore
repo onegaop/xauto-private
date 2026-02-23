@@ -24,7 +24,15 @@ DerivedData/
 *.xcworkspace/
 *.xcodeproj/xcuserdata/
 *.xcuserstate
-apps/ios/XAuto.xcodeproj/
+!apps/ios/XAuto.xcodeproj/
+!apps/ios/XAuto.xcodeproj/project.pbxproj
+!apps/ios/XAuto.xcodeproj/xcshareddata/
+!apps/ios/XAuto.xcodeproj/xcshareddata/**
+!apps/ios/XAuto.xcodeproj/project.xcworkspace/
+!apps/ios/XAuto.xcodeproj/project.xcworkspace/contents.xcworkspacedata
+!apps/ios/XAuto.xcodeproj/project.xcworkspace/xcshareddata/
+!apps/ios/XAuto.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+!apps/ios/XAuto.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 
 # Logs
 npm-debug.log*
