@@ -63,7 +63,7 @@ struct TodayView: View {
                         itemsSection
                         weatherDiagnosticsSection
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
                     .padding(.bottom, 24)
