@@ -977,7 +977,7 @@ struct ItemDetailView: View {
                 Card {
                     VStack(alignment: .leading, spacing: DS.md) {
                         HStack {
-                            Label("端侧AI娱乐增强", systemImage: "sparkles")
+                            Label("端侧AI本地增强", systemImage: "sparkles")
                                 .font(.headline)
                             Spacer()
                             if viewModel.isGeneratingLocalInsight {
@@ -986,19 +986,36 @@ struct ItemDetailView: View {
                             }
                         }
 
-                        Text("不影响主摘要流程")
+                        Text("不影响后端摘要，仅用于 Detail 内快速决策")
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
-                        Button("生成趣味洞察") {
+                        Picker("增强模式", selection: $viewModel.localInsightMode) {
+                            ForEach(LocalFunInsightMode.allCases) { mode in
+                                Text(mode.title).tag(mode)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+
+                        Text(viewModel.localInsightMode.subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Button(viewModel.localInsightMode.buttonTitle) {
                             Task { await viewModel.generateLocalInsightIfEnabled() }
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.orange)
 
                         if let localInsight = viewModel.localInsight {
-                            Text(localInsight.title)
-                                .font(.subheadline.weight(.semibold))
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(localInsight.title)
+                                    .font(.subheadline.weight(.semibold))
+                                Spacer()
+                                Text(localInsight.source)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                             ForEach(localInsight.highlights, id: \.self) { line in
                                 Text("• \(line)")
                                     .font(.footnote)
@@ -1218,8 +1235,8 @@ struct SettingsView: View {
                 }
 
                 Section("AI") {
-                    Toggle("端侧AI娱乐增强", isOn: $localFunAIEnabled)
-                    Text("仅用于本地趣味补充，不影响现有摘要与后端逻辑。")
+                    Toggle("端侧AI本地增强", isOn: $localFunAIEnabled)
+                    Text("仅用于 Detail 页本地复述/挑战/行动计划，不影响现有摘要与后端逻辑。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

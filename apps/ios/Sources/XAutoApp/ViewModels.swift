@@ -326,6 +326,7 @@ final class ItemDetailViewModel: ObservableObject {
     @Published var isGeneratingLocalInsight = false
     @Published var errorMessage: String?
     @Published var localInsight: LocalFunInsight?
+    @Published var localInsightMode: LocalFunInsightMode = .actionPlan
 
     init(seed: BookmarkItemResponse) {
         self.item = seed
@@ -353,15 +354,16 @@ final class ItemDetailViewModel: ObservableObject {
         guard enabled else {
             localInsight = LocalFunInsight(
                 title: "端侧增强已关闭",
-                highlights: ["可在 Settings 打开「端侧AI娱乐增强」。"],
-                suggestions: ["打开后可生成本地趣味洞察。"]
+                highlights: ["可在 Settings 打开「端侧AI本地增强」。"],
+                suggestions: ["打开后可生成本地复述、反方挑战和行动计划。"],
+                source: "Disabled"
             )
             return
         }
 
         isGeneratingLocalInsight = true
         defer { isGeneratingLocalInsight = false }
-        localInsight = LocalFunInsightService.generate(from: item.text)
+        localInsight = await LocalFunInsightService.generate(from: item, mode: localInsightMode)
     }
 }
 
