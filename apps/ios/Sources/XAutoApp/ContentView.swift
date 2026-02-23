@@ -781,6 +781,10 @@ struct WeekView: View {
 struct ItemDetailView: View {
     @StateObject private var viewModel: ItemDetailViewModel
     @State private var activeWebURL: URL?
+    @State private var activeDictionaryTerm: String?
+    @State private var isVocabularySheetPresented = false
+    @State private var vocabularyState = VocabularySheetState()
+    @State private var vocabularyRequestID: UUID?
     @State private var copiedKeyword: String?
     @State private var copiedKeywordsHint: String?
     @Environment(\.openURL) private var openURL
@@ -790,6 +794,11 @@ struct ItemDetailView: View {
     }
 
     var body: some View {
+        let vocabularyPlan = DetailVocabularyPlanner.build(item: viewModel.item, localInsight: viewModel.localInsight)
+        let highlightedWordCount = vocabularyPlan.values.reduce(0) { partial, terms in
+            partial + terms.count
+        }
+
         ScrollView(.vertical) {
             VStack(spacing: DS.lg) {
                 Card {
@@ -808,11 +817,25 @@ struct ItemDetailView: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        RichPostTextView(text: viewModel.item.text) { tappedURL in
+                        RichPostTextView(
+                            text: viewModel.item.text,
+                            highlightedTerms: vocabularyPlan["post.text"] ?? [],
+                            textStyle: .body,
+                            fontWeight: .regular,
+                            textColor: .label
+                        ) { tappedURL in
                             openURLForDetail(tappedURL)
+                        } onVocabularyTap: { term in
+                            openDictionaryLookup(for: term)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
+
+                        if highlightedWordCount > 0 {
+                            Text("高亮词可点击查词；链接仍保持原跳转。同词在本页只高亮一次。")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
 
                         if let url = URL(string: viewModel.item.url), !viewModel.item.url.isEmpty {
                             Button {
@@ -834,7 +857,14 @@ struct ItemDetailView: View {
                             VStack(alignment: .leading, spacing: DS.sm) {
                                 Text("Markdown 摘要")
                                     .font(.headline)
-                                MarkdownTextBlock(markdown: renderMarkdown)
+                                MarkdownTextBlock(
+                                    markdown: renderMarkdown,
+                                    highlightedTerms: vocabularyPlan["summary.renderMarkdown"] ?? []
+                                ) { tappedURL in
+                                    openURLForDetail(tappedURL)
+                                } onVocabularyTap: { term in
+                                    openDictionaryLookup(for: term)
+                                }
                             }
                         }
                     }
@@ -844,22 +874,49 @@ struct ItemDetailView: View {
                             Text("摘要")
                                 .font(.headline)
                             if !summary.oneLinerZh.isEmpty {
-                                Text(summary.oneLinerZh)
-                                    .font(.subheadline.weight(.semibold))
+                                RichPostTextView(
+                                    text: summary.oneLinerZh,
+                                    highlightedTerms: vocabularyPlan["summary.oneLinerZh"] ?? [],
+                                    textStyle: .subheadline,
+                                    fontWeight: .semibold,
+                                    textColor: .label
+                                ) { tappedURL in
+                                    openURLForDetail(tappedURL)
+                                } onVocabularyTap: { term in
+                                    openDictionaryLookup(for: term)
+                                }
                             }
                             if !summary.oneLinerEn.isEmpty {
-                                Text(summary.oneLinerEn)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
+                                RichPostTextView(
+                                    text: summary.oneLinerEn,
+                                    highlightedTerms: vocabularyPlan["summary.oneLinerEn"] ?? [],
+                                    textStyle: .footnote,
+                                    fontWeight: .regular,
+                                    textColor: .secondaryLabel
+                                ) { tappedURL in
+                                    openURLForDetail(tappedURL)
+                                } onVocabularyTap: { term in
+                                    openDictionaryLookup(for: term)
+                                }
                             }
-                            ForEach(summary.bulletsZh, id: \.self) { bullet in
+                            ForEach(Array(summary.bulletsZh.enumerated()), id: \.offset) { index, bullet in
                                 HStack(alignment: .top, spacing: DS.sm) {
                                     Circle()
                                         .fill(Color.orange)
                                         .frame(width: 5, height: 5)
                                         .padding(.top, 7)
-                                    Text(bullet)
-                                        .font(.subheadline)
+                                    RichPostTextView(
+                                        text: bullet,
+                                        highlightedTerms: vocabularyPlan["summary.bulletZh.\(index)"] ?? [],
+                                        textStyle: .subheadline,
+                                        fontWeight: .regular,
+                                        textColor: .label
+                                    ) { tappedURL in
+                                        openURLForDetail(tappedURL)
+                                    } onVocabularyTap: { term in
+                                        openDictionaryLookup(for: term)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                             }
                             if summary.qualityScore > 0 {
@@ -875,8 +932,17 @@ struct ItemDetailView: View {
                             VStack(alignment: .leading, spacing: DS.sm) {
                                 Text("核心观点")
                                     .font(.headline)
-                                Text(coreViewpoint)
-                                    .font(.subheadline)
+                                RichPostTextView(
+                                    text: coreViewpoint,
+                                    highlightedTerms: vocabularyPlan["summary.coreViewpoint"] ?? [],
+                                    textStyle: .subheadline,
+                                    fontWeight: .regular,
+                                    textColor: .label
+                                ) { tappedURL in
+                                    openURLForDetail(tappedURL)
+                                } onVocabularyTap: { term in
+                                    openDictionaryLookup(for: term)
+                                }
                             }
                         }
                     }
@@ -886,8 +952,17 @@ struct ItemDetailView: View {
                             VStack(alignment: .leading, spacing: DS.sm) {
                                 Text("底层问题")
                                     .font(.headline)
-                                Text(underlyingProblem)
-                                    .font(.subheadline)
+                                RichPostTextView(
+                                    text: underlyingProblem,
+                                    highlightedTerms: vocabularyPlan["summary.underlyingProblem"] ?? [],
+                                    textStyle: .subheadline,
+                                    fontWeight: .regular,
+                                    textColor: .label
+                                ) { tappedURL in
+                                    openURLForDetail(tappedURL)
+                                } onVocabularyTap: { term in
+                                    openDictionaryLookup(for: term)
+                                }
                             }
                         }
                     }
@@ -897,7 +972,7 @@ struct ItemDetailView: View {
                             VStack(alignment: .leading, spacing: DS.md) {
                                 Text("关键技术/概念")
                                     .font(.headline)
-                                ForEach(summary.keyTechnologies) { item in
+                                ForEach(Array(summary.keyTechnologies.enumerated()), id: \.element.id) { index, item in
                                     VStack(alignment: .leading, spacing: 2) {
                                         Button {
                                             openGoogleAISearch(for: item.concept)
@@ -913,9 +988,17 @@ struct ItemDetailView: View {
                                             .frame(maxWidth: .infinity, alignment: .leading)
                                         }
                                         .buttonStyle(.plain)
-                                        Text(item.solves)
-                                            .font(.footnote)
-                                            .foregroundStyle(.secondary)
+                                        RichPostTextView(
+                                            text: item.solves,
+                                            highlightedTerms: vocabularyPlan["summary.keyTechSolves.\(index)"] ?? [],
+                                            textStyle: .footnote,
+                                            fontWeight: .regular,
+                                            textColor: .secondaryLabel
+                                        ) { tappedURL in
+                                            openURLForDetail(tappedURL)
+                                        } onVocabularyTap: { term in
+                                            openDictionaryLookup(for: term)
+                                        }
                                     }
                                 }
                             }
@@ -927,9 +1010,23 @@ struct ItemDetailView: View {
                             VStack(alignment: .leading, spacing: DS.sm) {
                                 Text("判断类型")
                                     .font(.headline)
-                                ForEach(summary.claimTypes.prefix(5)) { claim in
-                                    Text("\(claimLabelTitle(claim.label)) · \(claim.statement)")
-                                        .font(.footnote)
+                                ForEach(Array(summary.claimTypes.prefix(5).enumerated()), id: \.element.id) { index, claim in
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(claimLabelTitle(claim.label))
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(.secondary)
+                                        RichPostTextView(
+                                            text: claim.statement,
+                                            highlightedTerms: vocabularyPlan["summary.claim.\(index)"] ?? [],
+                                            textStyle: .footnote,
+                                            fontWeight: .regular,
+                                            textColor: .label
+                                        ) { tappedURL in
+                                            openURLForDetail(tappedURL)
+                                        } onVocabularyTap: { term in
+                                            openDictionaryLookup(for: term)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -940,9 +1037,25 @@ struct ItemDetailView: View {
                             VStack(alignment: .leading, spacing: DS.sm) {
                                 Text("行动项")
                                     .font(.headline)
-                                ForEach(summary.actions, id: \.self) { action in
-                                    Label(action, systemImage: "sparkles")
-                                        .font(.subheadline)
+                                ForEach(Array(summary.actions.enumerated()), id: \.offset) { index, action in
+                                    HStack(alignment: .top, spacing: DS.sm) {
+                                        Image(systemName: "sparkles")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(.orange)
+                                            .padding(.top, 3)
+                                        RichPostTextView(
+                                            text: action,
+                                            highlightedTerms: vocabularyPlan["summary.action.\(index)"] ?? [],
+                                            textStyle: .subheadline,
+                                            fontWeight: .regular,
+                                            textColor: .label
+                                        ) { tappedURL in
+                                            openURLForDetail(tappedURL)
+                                        } onVocabularyTap: { term in
+                                            openDictionaryLookup(for: term)
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
                                 }
                             }
                         }
@@ -1010,22 +1123,62 @@ struct ItemDetailView: View {
 
                         if let localInsight = viewModel.localInsight {
                             HStack(alignment: .firstTextBaseline) {
-                                Text(localInsight.title)
-                                    .font(.subheadline.weight(.semibold))
+                                RichPostTextView(
+                                    text: localInsight.title,
+                                    highlightedTerms: vocabularyPlan["localInsight.title"] ?? [],
+                                    textStyle: .subheadline,
+                                    fontWeight: .semibold,
+                                    textColor: .label
+                                ) { tappedURL in
+                                    openURLForDetail(tappedURL)
+                                } onVocabularyTap: { term in
+                                    openDictionaryLookup(for: term)
+                                }
                                 Spacer()
                                 Text(localInsight.source)
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
-                            ForEach(localInsight.highlights, id: \.self) { line in
-                                Text("• \(line)")
-                                    .font(.footnote)
+                            ForEach(Array(localInsight.highlights.enumerated()), id: \.offset) { index, line in
+                                HStack(alignment: .top, spacing: DS.sm) {
+                                    Text("•")
+                                        .font(.footnote.weight(.semibold))
+                                        .padding(.top, 2)
+                                    RichPostTextView(
+                                        text: line,
+                                        highlightedTerms: vocabularyPlan["localInsight.highlight.\(index)"] ?? [],
+                                        textStyle: .footnote,
+                                        fontWeight: .regular,
+                                        textColor: .label
+                                    ) { tappedURL in
+                                        openURLForDetail(tappedURL)
+                                    } onVocabularyTap: { term in
+                                        openDictionaryLookup(for: term)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
                             }
                             if !localInsight.suggestions.isEmpty {
                                 Divider()
-                                ForEach(localInsight.suggestions, id: \.self) { line in
-                                    Label(line, systemImage: "sparkles")
-                                        .font(.footnote)
+                                ForEach(Array(localInsight.suggestions.enumerated()), id: \.offset) { index, line in
+                                    HStack(alignment: .top, spacing: DS.sm) {
+                                        Image(systemName: "sparkles")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(.orange)
+                                            .padding(.top, 2)
+                                        RichPostTextView(
+                                            text: line,
+                                            highlightedTerms: vocabularyPlan["localInsight.suggestion.\(index)"] ?? [],
+                                            textStyle: .footnote,
+                                            fontWeight: .regular,
+                                            textColor: .label
+                                        ) { tappedURL in
+                                            openURLForDetail(tappedURL)
+                                        } onVocabularyTap: { term in
+                                            openDictionaryLookup(for: term)
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
                                 }
                             }
                         }
@@ -1041,7 +1194,7 @@ struct ItemDetailView: View {
             .frame(maxWidth: .infinity)
             .clipped()
         }
-        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        .scrollBounceBehavior(.basedOnSize, axes: .vertical)
         .background(AppBackground())
         .navigationTitle("Detail")
         .toolbar {
@@ -1064,6 +1217,39 @@ struct ItemDetailView: View {
                 InAppSafariView(url: url)
                     .ignoresSafeArea()
             }
+        }
+        .sheet(isPresented: Binding(get: { activeDictionaryTerm != nil }, set: { isShown in
+            if !isShown { activeDictionaryTerm = nil }
+        })) {
+            if let term = activeDictionaryTerm {
+                DictionaryLookupView(term: term)
+                    .ignoresSafeArea()
+            }
+        }
+        .sheet(isPresented: $isVocabularySheetPresented) {
+            VocabularyInsightSheet(
+                state: vocabularyState,
+                onCopy: copyVocabularyTranslation,
+                onOpenSystemDictionary: {
+                    let term = vocabularyState.term
+                    isVocabularySheetPresented = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                        openSystemDictionary(for: term)
+                    }
+                },
+                onRetry: {
+                    Task {
+                        await triggerVocabularyLookup(
+                            term: vocabularyState.term,
+                            context: vocabularyState.context,
+                            forceRefresh: true
+                        )
+                    }
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(24)
         }
     }
 
@@ -1114,6 +1300,137 @@ struct ItemDetailView: View {
         let candidate = parts[statusIndex + 1]
         guard candidate.allSatisfy(\.isNumber) else { return nil }
         return candidate
+    }
+
+    private func openDictionaryLookup(for term: String) {
+        let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return
+        }
+
+        Task {
+            await triggerVocabularyLookup(
+                term: trimmed,
+                context: viewModel.item.text,
+                forceRefresh: false
+            )
+        }
+    }
+
+    private func triggerVocabularyLookup(term: String, context: String, forceRefresh: Bool) async {
+        let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return
+        }
+
+        let requestID = UUID()
+        vocabularyRequestID = requestID
+        vocabularyState = VocabularySheetState(
+            term: trimmed,
+            context: compactLookupContext(context),
+            sourceLangHint: detectSourceLangHint(from: trimmed),
+            targetLang: "zh-CN",
+            isLoading: true,
+            card: nil,
+            fromCache: false,
+            errorMessage: nil
+        )
+        isVocabularySheetPresented = true
+
+        do {
+            let result = try await VocabularyLookupService.shared.lookup(
+                term: trimmed,
+                context: vocabularyState.context,
+                sourceLangHint: vocabularyState.sourceLangHint,
+                targetLang: vocabularyState.targetLang,
+                forceRefresh: forceRefresh
+            )
+
+            guard vocabularyRequestID == requestID else {
+                return
+            }
+
+            vocabularyState.isLoading = false
+            vocabularyState.card = result.response
+            vocabularyState.fromCache = result.fromCache
+            vocabularyState.errorMessage = nil
+        } catch {
+            guard vocabularyRequestID == requestID else {
+                return
+            }
+
+            vocabularyState.isLoading = false
+            vocabularyState.errorMessage = error.localizedDescription
+        }
+    }
+
+    private func compactLookupContext(_ raw: String) -> String {
+        let compact = raw.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines)
+        if compact.count <= 160 {
+            return compact
+        }
+        return String(compact.prefix(160))
+    }
+
+    private func detectSourceLangHint(from term: String) -> String {
+        let hasChinese = term.range(of: "\\p{Han}", options: .regularExpression) != nil
+        let hasEnglish = term.range(of: "[A-Za-z]", options: .regularExpression) != nil
+        if hasChinese && hasEnglish {
+            return "mixed"
+        }
+        if hasChinese {
+            return "zh"
+        }
+        if hasEnglish {
+            return "en"
+        }
+        return "unknown"
+    }
+
+    private func copyVocabularyTranslation() {
+        guard let card = vocabularyState.card else {
+            return
+        }
+        let lines = [card.translation, card.shortDefinitionZh]
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        guard !lines.isEmpty else {
+            return
+        }
+        UIPasteboard.general.string = lines.joined(separator: "\n")
+    }
+
+    private func openSystemDictionary(for term: String) {
+        if UIReferenceLibraryViewController.dictionaryHasDefinition(forTerm: term) {
+            activeDictionaryTerm = term
+            return
+        }
+
+        guard let url = dictionaryLookupURL(for: term) else {
+            return
+        }
+        activeWebURL = url
+    }
+
+    private func dictionaryLookupURL(for term: String) -> URL? {
+        let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return nil
+        }
+
+        let query = containsChinese(trimmed)
+            ? "\(trimmed) 英文 中文 释义"
+            : "define \(trimmed)"
+
+        var components = URLComponents(string: "https://www.google.com/search")
+        components?.queryItems = [
+            URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "hl", value: "zh-CN")
+        ]
+        return components?.url
+    }
+
+    private func containsChinese(_ value: String) -> Bool {
+        value.range(of: "\\p{Han}", options: .regularExpression) != nil
     }
 
     private func openGoogleAISearch(for keyword: String) {
@@ -1206,6 +1523,213 @@ struct ItemDetailView: View {
         return output
     }
 
+}
+
+private enum DetailVocabularyPlanner {
+    private static let maxTermsPerBlock = 3
+    private static let maxTermsTotal = 36
+
+    private static let englishStopwords: Set<String> = [
+        "about", "after", "again", "also", "because", "before", "being", "between", "could",
+        "first", "from", "have", "into", "just", "more", "most", "other", "over", "same",
+        "some", "such", "than", "that", "their", "there", "these", "they", "this", "those",
+        "very", "what", "when", "where", "which", "while", "with", "would", "your", "you",
+        "post", "tweet", "thread", "summary", "insight"
+    ]
+
+    private struct Block {
+        let key: String
+        let text: String
+    }
+
+    static func build(item: BookmarkItemResponse, localInsight: LocalFunInsight?) -> [String: [String]] {
+        let blocks = buildBlocks(item: item, localInsight: localInsight)
+
+        var result: [String: [String]] = [:]
+        var globalSeen = Set<String>()
+        var totalCount = 0
+
+        for block in blocks {
+            var blockTerms: [String] = []
+            let candidates = orderedCandidates(from: block.text)
+
+            for candidate in candidates {
+                let normalized = normalizedKey(candidate)
+                if normalized.isEmpty || globalSeen.contains(normalized) {
+                    continue
+                }
+
+                globalSeen.insert(normalized)
+                blockTerms.append(candidate)
+                totalCount += 1
+
+                if blockTerms.count >= maxTermsPerBlock || totalCount >= maxTermsTotal {
+                    break
+                }
+            }
+
+            if !blockTerms.isEmpty {
+                result[block.key] = blockTerms
+            }
+
+            if totalCount >= maxTermsTotal {
+                break
+            }
+        }
+
+        return result
+    }
+
+    private static func buildBlocks(item: BookmarkItemResponse, localInsight: LocalFunInsight?) -> [Block] {
+        var blocks: [Block] = []
+        blocks.append(Block(key: "post.text", text: item.text))
+
+        if let summary = item.summary {
+            if let renderMarkdown = summary.renderMarkdown?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !renderMarkdown.isEmpty {
+                blocks.append(
+                    Block(
+                        key: "summary.renderMarkdown",
+                        text: plainTextForVocabulary(fromMarkdown: renderMarkdown)
+                    )
+                )
+            }
+
+            blocks.append(Block(key: "summary.oneLinerZh", text: summary.oneLinerZh))
+            blocks.append(Block(key: "summary.oneLinerEn", text: summary.oneLinerEn))
+
+            for (index, bullet) in summary.bulletsZh.enumerated() {
+                blocks.append(Block(key: "summary.bulletZh.\(index)", text: bullet))
+            }
+
+            if let coreViewpoint = summary.coreViewpoint {
+                blocks.append(Block(key: "summary.coreViewpoint", text: coreViewpoint))
+            }
+
+            if let underlyingProblem = summary.underlyingProblem {
+                blocks.append(Block(key: "summary.underlyingProblem", text: underlyingProblem))
+            }
+
+            for (index, item) in summary.keyTechnologies.enumerated() {
+                blocks.append(Block(key: "summary.keyTechSolves.\(index)", text: item.solves))
+            }
+
+            for (index, claim) in summary.claimTypes.prefix(5).enumerated() {
+                blocks.append(Block(key: "summary.claim.\(index)", text: claim.statement))
+            }
+
+            for (index, action) in summary.actions.enumerated() {
+                blocks.append(Block(key: "summary.action.\(index)", text: action))
+            }
+        }
+
+        if let localInsight {
+            blocks.append(Block(key: "localInsight.title", text: localInsight.title))
+            for (index, line) in localInsight.highlights.enumerated() {
+                blocks.append(Block(key: "localInsight.highlight.\(index)", text: line))
+            }
+            for (index, line) in localInsight.suggestions.enumerated() {
+                blocks.append(Block(key: "localInsight.suggestion.\(index)", text: line))
+            }
+        }
+
+        return blocks.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
+    private static func plainTextForVocabulary(fromMarkdown markdown: String) -> String {
+        var text = markdown
+
+        let cleanupRules: [(String, String)] = [
+            ("(?s)```.*?```", " "),
+            ("`[^`\\n]+`", " "),
+            ("!\\[[^\\]]*\\]\\(([^\\)]*)\\)", " "),
+            ("\\[([^\\]]+)\\]\\(([^\\)]*)\\)", "$1"),
+            ("<https?://[^>\\s]+>", " ")
+        ]
+
+        for (pattern, template) in cleanupRules {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else {
+                continue
+            }
+            let nsText = text as NSString
+            let range = NSRange(location: 0, length: nsText.length)
+            text = regex.stringByReplacingMatches(in: text, options: [], range: range, withTemplate: template)
+        }
+
+        return text
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func orderedCandidates(from text: String) -> [String] {
+        let nsText = text as NSString
+        let fullRange = NSRange(location: 0, length: nsText.length)
+        guard fullRange.length > 0 else {
+            return []
+        }
+
+        var matches: [(location: Int, term: String)] = []
+
+        if let englishRegex = try? NSRegularExpression(pattern: "(?<![A-Za-z0-9_])[A-Za-z][A-Za-z+'-]{3,}(?![A-Za-z0-9_])") {
+            for match in englishRegex.matches(in: text, options: [], range: fullRange) {
+                let word = nsText.substring(with: match.range)
+                if isValidEnglish(word) {
+                    matches.append((match.range.location, word))
+                }
+            }
+        }
+
+        matches.sort { $0.location < $1.location }
+
+        var output: [String] = []
+        var seenInBlock = Set<String>()
+        for (_, term) in matches {
+            let normalized = normalizedKey(term)
+            guard !normalized.isEmpty, !seenInBlock.contains(normalized) else {
+                continue
+            }
+            seenInBlock.insert(normalized)
+            output.append(term)
+        }
+        return output
+    }
+
+    private static func isValidEnglish(_ raw: String) -> Bool {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 4, trimmed.count <= 28 else {
+            return false
+        }
+        let normalized = normalizedKey(trimmed)
+        guard !normalized.isEmpty else {
+            return false
+        }
+        if englishStopwords.contains(normalized) {
+            return false
+        }
+        if normalized.hasPrefix("http") || normalized.hasPrefix("www") {
+            return false
+        }
+        return true
+    }
+
+    private static func normalizedKey(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return ""
+        }
+
+        if trimmed.range(of: "\\p{Han}", options: .regularExpression) != nil {
+            return trimmed
+        }
+
+        let lowercased = trimmed.lowercased()
+        let cleaned = lowercased.replacingOccurrences(
+            of: "^[^a-z0-9]+|[^a-z0-9]+$",
+            with: "",
+            options: .regularExpression
+        )
+        return cleaned
+    }
 }
 
 // MARK: - Item Loader
@@ -1755,11 +2279,364 @@ private struct KeywordLinkFlow: View {
     }
 }
 
-private struct MarkdownTextBlock: View {
-    let markdown: String
+private struct VocabularySheetState {
+    var term: String = ""
+    var context: String = ""
+    var sourceLangHint: String = "unknown"
+    var targetLang: String = "zh-CN"
+    var isLoading: Bool = false
+    var card: VocabularyLookupResponse?
+    var fromCache: Bool = false
+    var errorMessage: String?
+}
+
+private struct VocabularyInsightSheet: View {
+    let state: VocabularySheetState
+    let onCopy: () -> Void
+    let onOpenSystemDictionary: () -> Void
+    let onRetry: () -> Void
 
     var body: some View {
-        Markdown(markdown)
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: DS.lg) {
+                    if state.isLoading {
+                        VStack(spacing: DS.md) {
+                            ProgressView()
+                                .scaleEffect(1.2)
+                            Text("正在通过 AI 深度解析语境...")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 40)
+                    } else if let card = state.card {
+                        VStack(alignment: .leading, spacing: DS.xl) {
+                            // Header Section
+                            VStack(alignment: .leading, spacing: DS.xs) {
+                                HStack(alignment: .firstTextBaseline) {
+                                    Text(card.term.isEmpty ? state.term : card.term)
+                                        .font(.system(.title, design: .rounded).weight(.bold))
+                                    
+                                    Spacer()
+                                    
+                                    if card.confidence > 0 {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "sparkles")
+                                                .font(.caption2)
+                                            Text("\(Int((card.confidence * 100).rounded()))%")
+                                                .font(.system(.caption, design: .monospaced).weight(.bold))
+                                        }
+                                        .foregroundStyle(.orange)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.orange.opacity(0.1), in: Capsule())
+                                    }
+                                }
+                                
+                                if !card.phonetic.ipa.isEmpty || !card.phonetic.us.isEmpty || !card.phonetic.uk.isEmpty {
+                                    HStack(spacing: DS.md) {
+                                        if !card.phonetic.ipa.isEmpty {
+                                            Text("/\(card.phonetic.ipa)/")
+                                                .font(.subheadline.monospaced())
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        
+                                        HStack(spacing: DS.xs) {
+                                            if !card.phonetic.us.isEmpty {
+                                                Label(card.phonetic.us, systemImage: "speaker.wave.2")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                if !card.partOfSpeech.isEmpty {
+                                    HStack(spacing: DS.xs) {
+                                        ForEach(card.partOfSpeech, id: \.self) { pos in
+                                            Text(pos)
+                                                .font(.caption2.weight(.bold))
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 2)
+                                                .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 4))
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                    .padding(.top, 4)
+                                }
+                            }
+
+                            // Definition Section
+                            VStack(alignment: .leading, spacing: DS.sm) {
+                                Text(card.translation)
+                                    .font(.title3.weight(.bold))
+                                    .foregroundStyle(.primary)
+                                
+                                if !card.shortDefinitionZh.isEmpty {
+                                    Text(card.shortDefinitionZh)
+                                        .font(.body)
+                                        .lineSpacing(4)
+                                }
+                                
+                                if !card.shortDefinitionEn.isEmpty {
+                                    Text(card.shortDefinitionEn)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .italic()
+                                }
+                            }
+                            .padding(DS.md)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 16))
+
+                            // Context Example
+                            VStack(alignment: .leading, spacing: DS.sm) {
+                                Label("语境例句", systemImage: "quote.opening")
+                                    .font(.headline)
+                                    .foregroundStyle(.orange)
+                                
+                                VStack(alignment: .leading, spacing: DS.xs) {
+                                    Text(card.example.source)
+                                        .font(.subheadline.weight(.medium))
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    
+                                    Text(card.example.target)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(.leading, DS.sm)
+                                .padding(.vertical, DS.xs)
+                                .border(width: 2, edges: [.leading], color: .orange.opacity(0.3))
+                            }
+
+                            if !card.collocations.isEmpty {
+                                VStack(alignment: .leading, spacing: DS.sm) {
+                                    Label("常见搭配", systemImage: "link")
+                                        .font(.headline)
+                                    
+                                    FlowLayout(spacing: DS.sm) {
+                                        ForEach(card.collocations) { item in
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(item.text)
+                                                    .font(.subheadline.weight(.semibold))
+                                                Text(item.translation)
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+                                        }
+                                    }
+                                }
+                            }
+
+                            if !card.confusable.isEmpty {
+                                VStack(alignment: .leading, spacing: DS.sm) {
+                                    Label("易混辨析", systemImage: "arrow.left.and.right.circle")
+                                        .font(.headline)
+                                    
+                                    ForEach(card.confusable) { item in
+                                        HStack(alignment: .top, spacing: DS.sm) {
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(item.word)
+                                                    .font(.subheadline.weight(.bold))
+                                                    .foregroundStyle(.orange)
+                                                Text(item.diff)
+                                                    .font(.footnote)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                        .padding(DS.sm)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .background(Color.orange.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+                                    }
+                                }
+                            }
+                            
+                            // Footer Info
+                            HStack {
+                                Label(state.fromCache ? "已缓存" : "AI 生成", systemImage: state.fromCache ? "archivebox" : "sparkles")
+                                Spacer()
+                                Text("\(card.provider) · \(card.model)")
+                            }
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .padding(.top, DS.md)
+                        }
+                    }
+
+                    if let errorMessage = state.errorMessage, !errorMessage.isEmpty {
+                        VStack(spacing: DS.md) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.largeTitle)
+                                .foregroundStyle(.orange)
+                            Text(errorMessage)
+                                .font(.subheadline)
+                                .multilineTextAlignment(.center)
+                            Button("重试") { onRetry() }
+                                .buttonStyle(.bordered)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 40)
+                    }
+                }
+                .padding(.horizontal, DS.pageH)
+                .padding(.top, DS.md)
+                .padding(.bottom, 100) // Space for bottom buttons
+            }
+            .background(AppBackground())
+            .navigationTitle("词境解析")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        onCopy()
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                    }
+                    .disabled(state.card == nil)
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                VStack(spacing: 0) {
+                    Divider()
+                    HStack(spacing: DS.md) {
+                        Button {
+                            onOpenSystemDictionary()
+                        } label: {
+                            Label("系统词典", systemImage: "book")
+                                .font(.subheadline.weight(.medium))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.primary)
+
+                        Button {
+                            onRetry()
+                        } label: {
+                            Label("重新解析", systemImage: "sparkles")
+                                .font(.subheadline.weight(.bold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.orange)
+                    }
+                    .padding(.horizontal, DS.pageH)
+                    .padding(.vertical, DS.md)
+                    .background(.ultraThinMaterial)
+                }
+            }
+        }
+    }
+}
+
+// Helper for Flow Layout (Simple version for Collocations)
+struct FlowLayout: View {
+    let spacing: CGFloat
+    let children: [AnyView]
+    
+    init<Data: Collection, Content: View>(
+        _ data: Data,
+        spacing: CGFloat = 8,
+        @ViewBuilder content: @escaping (Data.Element) -> Content
+    ) where Data.Element: Identifiable {
+        self.spacing = spacing
+        self.children = data.map { AnyView(content($0)) }
+    }
+    
+    init(spacing: CGFloat = 8, @ViewBuilder content: () -> some View) {
+        self.spacing = spacing
+        // This is a simplified version, in real app would use a proper FlowLayout
+        self.children = [] 
+    }
+
+    var body: some View {
+        // Fallback to VStack if proper FlowLayout is not available
+        VStack(alignment: .leading, spacing: spacing) {
+            ForEach(0..<children.count, id: \.self) { index in
+                children[index]
+            }
+        }
+    }
+}
+
+extension View {
+    func border(width: CGFloat, edges: [Edge], color: Color) -> some View {
+        overlay(
+            EdgeBorder(width: width, edges: edges)
+                .foregroundColor(color)
+        )
+    }
+}
+
+struct EdgeBorder: Shape {
+    var width: CGFloat
+    var edges: [Edge]
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        for edge in edges {
+            var x: CGFloat {
+                switch edge {
+                case .top, .bottom, .leading: return rect.minX
+                case .trailing: return rect.maxX - width
+                }
+            }
+
+            var y: CGFloat {
+                switch edge {
+                case .top, .leading, .trailing: return rect.minY
+                case .bottom: return rect.maxY - width
+                }
+            }
+
+            var w: CGFloat {
+                switch edge {
+                case .top, .bottom: return rect.width
+                case .leading, .trailing: return width
+                }
+            }
+
+            var h: CGFloat {
+                switch edge {
+                case .top, .bottom: return width
+                case .leading, .trailing: return rect.height
+                }
+            }
+            path.addRect(CGRect(x: x, y: y, width: w, height: h))
+        }
+        return path
+    }
+}
+
+private struct MarkdownTextBlock: View {
+    let markdown: String
+    let highlightedTerms: [String]
+    let onLinkTap: (URL) -> Void
+    let onVocabularyTap: (String) -> Void
+
+    init(
+        markdown: String,
+        highlightedTerms: [String] = [],
+        onLinkTap: @escaping (URL) -> Void = { _ in },
+        onVocabularyTap: @escaping (String) -> Void = { _ in }
+    ) {
+        self.markdown = markdown
+        self.highlightedTerms = highlightedTerms
+        self.onLinkTap = onLinkTap
+        self.onVocabularyTap = onVocabularyTap
+    }
+
+    private var renderedMarkdown: String {
+        MarkdownVocabularyLinker.injectVocabularyLinks(in: markdown, terms: highlightedTerms)
+    }
+
+    var body: some View {
+        Markdown(renderedMarkdown)
             .markdownTheme(.gitHub)
             .markdownTextStyle {
                 FontSize(.em(0.95))
@@ -1869,6 +2746,14 @@ private struct MarkdownTextBlock: View {
                 .markdownMargin(top: 0, bottom: 12)
             }
             .textSelection(.enabled)
+            .environment(\.openURL, OpenURLAction { url in
+                if let term = dictionaryTerm(from: url) {
+                    onVocabularyTap(term)
+                    return .handled
+                }
+                onLinkTap(url)
+                return .handled
+            })
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -1879,6 +2764,170 @@ private struct MarkdownTextBlock: View {
             return "CODE"
         }
         return rawLanguage.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+    }
+
+    private func dictionaryTerm(from url: URL) -> String? {
+        guard url.scheme == "xauto-dict" else {
+            return nil
+        }
+        let term = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .first(where: { $0.name == "term" })?
+            .value?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let term, !term.isEmpty {
+            return term
+        }
+        return nil
+    }
+}
+
+private enum MarkdownVocabularyLinker {
+    private static let maskTokenPrefix = "@@XAUTO_MASK_"
+
+    private static let protectedPatterns: [String] = [
+        "(?s)```.*?```",
+        "`[^`\\n]+`",
+        "!\\[[^\\]]*\\]\\(([^\\)]*)\\)",
+        "\\[[^\\]]+\\]\\([^\\)]*\\)",
+        "<https?://[^>\\s]+>"
+    ]
+
+    static func injectVocabularyLinks(in markdown: String, terms: [String]) -> String {
+        let normalizedTerms = normalizedUniqueTerms(terms)
+        guard !normalizedTerms.isEmpty else {
+            return markdown
+        }
+
+        let masked = maskProtectedSegments(in: markdown)
+        var working = masked.text
+
+        for term in normalizedTerms {
+            working = replaceFirstOccurrence(of: term, in: working)
+        }
+
+        return restoreMasks(in: working, masks: masked.masks)
+    }
+
+    private static func normalizedUniqueTerms(_ terms: [String]) -> [String] {
+        var output: [String] = []
+        var seen = Set<String>()
+
+        for term in terms {
+            let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                continue
+            }
+            guard isEnglishLike(trimmed) else {
+                continue
+            }
+
+            let normalized = trimmed.lowercased()
+            guard !seen.contains(normalized) else {
+                continue
+            }
+            seen.insert(normalized)
+            output.append(trimmed)
+        }
+
+        return output
+    }
+
+    private static func maskProtectedSegments(in markdown: String) -> (text: String, masks: [String: String]) {
+        var text = markdown
+        var masks: [String: String] = [:]
+        var nextIndex = 0
+
+        for pattern in protectedPatterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else {
+                continue
+            }
+
+            let nsText = text as NSString
+            let fullRange = NSRange(location: 0, length: nsText.length)
+            let matches = regex.matches(in: text, options: [], range: fullRange).reversed()
+
+            for match in matches {
+                let token = "\(maskTokenPrefix)\(nextIndex)@@"
+                let protectedText = nsText.substring(with: match.range)
+                let mutable = NSMutableString(string: text)
+                mutable.replaceCharacters(in: match.range, with: token)
+                text = mutable as String
+                masks[token] = protectedText
+                nextIndex += 1
+            }
+        }
+
+        return (text, masks)
+    }
+
+    private static func restoreMasks(in text: String, masks: [String: String]) -> String {
+        var output = text
+        for (token, value) in masks {
+            output = output.replacingOccurrences(of: token, with: value)
+        }
+        return output
+    }
+
+    private static func replaceFirstOccurrence(of term: String, in text: String) -> String {
+        if isEnglishLike(term) {
+            return replaceFirstEnglishOccurrence(of: term, in: text)
+        }
+        return replaceFirstPlainOccurrence(of: term, in: text)
+    }
+
+    private static func replaceFirstEnglishOccurrence(of term: String, in text: String) -> String {
+        let escaped = NSRegularExpression.escapedPattern(for: term)
+        let pattern = "(?i)(?<![A-Za-z0-9_])\(escaped)(?![A-Za-z0-9_])"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return text
+        }
+
+        let nsText = text as NSString
+        let fullRange = NSRange(location: 0, length: nsText.length)
+        guard let match = regex.firstMatch(in: text, options: [], range: fullRange) else {
+            return text
+        }
+
+        let matchedWord = nsText.substring(with: match.range)
+        let replacement = markdownLink(word: matchedWord, term: matchedWord)
+        let mutable = NSMutableString(string: text)
+        mutable.replaceCharacters(in: match.range, with: replacement)
+        return mutable as String
+    }
+
+    private static func replaceFirstPlainOccurrence(of term: String, in text: String) -> String {
+        let nsText = text as NSString
+        let fullRange = NSRange(location: 0, length: nsText.length)
+        let foundRange = nsText.range(of: term, options: [], range: fullRange)
+        guard foundRange.location != NSNotFound, foundRange.length > 0 else {
+            return text
+        }
+
+        let matchedWord = nsText.substring(with: foundRange)
+        let replacement = markdownLink(word: matchedWord, term: matchedWord)
+        let mutable = NSMutableString(string: text)
+        mutable.replaceCharacters(in: foundRange, with: replacement)
+        return mutable as String
+    }
+
+    private static func markdownLink(word: String, term: String) -> String {
+        let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return word
+        }
+        var components = URLComponents()
+        components.scheme = "xauto-dict"
+        components.host = "lookup"
+        components.queryItems = [URLQueryItem(name: "term", value: trimmed)]
+        guard let urlString = components.url?.absoluteString else {
+            return word
+        }
+        return "[\(word)](\(urlString))"
+    }
+
+    private static func isEnglishLike(_ term: String) -> Bool {
+        term.range(of: "[A-Za-z]", options: .regularExpression) != nil
     }
 }
 

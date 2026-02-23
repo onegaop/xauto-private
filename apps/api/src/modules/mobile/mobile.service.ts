@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, PipelineStage, Types } from 'mongoose';
 import { BookmarkItem, BookmarkItemDocument } from '../../database/schemas/bookmark-item.schema';
@@ -6,6 +6,8 @@ import { DigestReport, DigestReportDocument } from '../../database/schemas/diges
 import { ItemSummary, ItemSummaryDocument } from '../../database/schemas/item-summary.schema';
 import { getEnv } from '../../config/env';
 import { dayKey, nowInTimezone, weekKey } from '../../common/utils/date';
+import { LookupVocabularyDto } from './dto/lookup-vocabulary.dto';
+import { AiService } from '../ai/ai.service';
 
 type DigestPeriod = 'daily' | 'weekly';
 type ClaimLabel = 'fact' | 'opinion' | 'speculation';
@@ -41,6 +43,7 @@ export class MobileService {
     'n-a',
     'na'
   ]);
+  private readonly logger = new Logger(MobileService.name);
 
   constructor(
     @InjectModel(BookmarkItem.name)
@@ -48,7 +51,8 @@ export class MobileService {
     @InjectModel(ItemSummary.name)
     private readonly itemSummaryModel: Model<ItemSummaryDocument>,
     @InjectModel(DigestReport.name)
-    private readonly digestReportModel: Model<DigestReportDocument>
+    private readonly digestReportModel: Model<DigestReportDocument>,
+    private readonly aiService: AiService
   ) {}
 
   async getTodayDigest(): Promise<Record<string, unknown> | null> {
@@ -301,6 +305,38 @@ export class MobileService {
     };
   }
 
+  async lookupVocabulary(dto: LookupVocabularyDto): Promise<Record<string, unknown>> {
+    const term = (dto.term ?? '').trim().slice(0, 64);
+    if (!term) {
+      throw new BadRequestException('Term is required');
+    }
+
+    const context = this.normalizeContext(dto.context);
+    const sourceLangHint = this.normalizeLangHint(dto.sourceLangHint);
+    const targetLang = this.normalizeTargetLang(dto.targetLang);
+
+    try {
+      const result = await this.aiService.lookupVocabularyCard({
+        term,
+        context,
+        sourceLangHint,
+        targetLang
+      });
+      this.logger.log(
+        `Vocabulary lookup success term="${term}" sourceLangHint="${sourceLangHint}" targetLang="${targetLang}" provider="${String(
+          result.provider
+        )}" model="${result.model}" confidence=${result.confidence.toFixed(2)}`
+      );
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Vocabulary lookup failed';
+      this.logger.warn(
+        `Vocabulary lookup failed term="${term}" sourceLangHint="${sourceLangHint}" targetLang="${targetLang}": ${message}`
+      );
+      throw new ServiceUnavailableException(message);
+    }
+  }
+
   private parseLimit(limitRaw: string | undefined, fallback: number): number {
     const parsed = Number(limitRaw);
     if (!Number.isFinite(parsed)) {
@@ -308,6 +344,38 @@ export class MobileService {
     }
 
     return Math.min(50, Math.max(1, Math.trunc(parsed)));
+  }
+
+  private normalizeContext(contextRaw?: string): string {
+    if (!contextRaw) {
+      return '';
+    }
+    return contextRaw.replace(/\s+/g, ' ').trim().slice(0, 240);
+  }
+
+  private normalizeLangHint(raw?: string): string {
+    if (!raw) {
+      return 'unknown';
+    }
+    const value = raw.trim().toLowerCase();
+    if (!value) {
+      return 'unknown';
+    }
+    if (value === 'en' || value === 'english') {
+      return 'en';
+    }
+    if (value === 'zh' || value === 'zh-cn' || value === 'chinese') {
+      return 'zh';
+    }
+    if (value === 'mixed') {
+      return 'mixed';
+    }
+    return 'unknown';
+  }
+
+  private normalizeTargetLang(raw?: string): string {
+    const normalized = raw?.trim();
+    return normalized && normalized.length > 0 ? normalized.slice(0, 16) : 'zh-CN';
   }
 
   private filterTopResearchKeywords(

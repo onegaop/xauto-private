@@ -1,6 +1,7 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { PatGuard } from '../../common/guards/pat.guard';
 import { MobileService } from './mobile.service';
+import { LookupVocabularyDto } from './dto/lookup-vocabulary.dto';
 
 @Controller('/v1/mobile')
 @UseGuards(PatGuard)
@@ -45,5 +46,10 @@ export class MobileController {
   @Get('/items/:tweetId')
   async getItem(@Param('tweetId') tweetId: string): Promise<Record<string, unknown>> {
     return this.mobileService.getItem(tweetId);
+  }
+
+  @Post('/vocabulary/lookup')
+  async lookupVocabulary(@Body() dto: LookupVocabularyDto): Promise<Record<string, unknown>> {
+    return this.mobileService.lookupVocabulary(dto);
   }
 }

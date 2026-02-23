@@ -17,14 +17,17 @@
 		5F44F47ED0706F890AB77597 /* InAppWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D1C34228226BF904A5BE882 /* InAppWebView.swift */; };
 		5FC3F946A653CF9FF2364146 /* XAutoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 594790C828006F1317CB82EB /* XAutoApp.swift */; };
 		6D1C15CFB31D92957B0A11AA /* SharedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDD70D766CBAD341113B0689 /* SharedStore.swift */; };
+		733C246E7FE88F75D82673E5 /* VocabularyModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 505B0BFA11C535E876A39746 /* VocabularyModels.swift */; };
 		83F79CE181D17A2F70CCCDE0 /* SharedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDD70D766CBAD341113B0689 /* SharedStore.swift */; };
 		87972249CA255372F739C7EB /* ViewModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D8B73753D896DC503576F34 /* ViewModels.swift */; };
 		89E409DD2472919AEDD1C4EA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA0C9A814163DB517DDF8989 /* Assets.xcassets */; };
 		9BE1DE6F5A94B84FB138B6F5 /* DomainModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD264641BB68B316A0267646 /* DomainModels.swift */; };
 		ADB778B2ABD52662E029B5CB /* XAutoWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = D56612EF42B9853457163637 /* XAutoWidget.swift */; };
+		B90EA3AE5C8698AD7E96891D /* VocabularyLookupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 845E5BA98039A844CB8081C1 /* VocabularyLookupService.swift */; };
 		BBB7286A1D06D9FB41D8EEC7 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28278A8823E1AED0304A59ED /* APIClient.swift */; };
 		D1A960689746641650C6F2F0 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 72CE1F096DA9A96A56852F42 /* MarkdownUI */; };
 		EC9F977A51532E00B2206A20 /* LocalFunInsightService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8234DD65F18577C2AE812926 /* LocalFunInsightService.swift */; };
+		F2F3AD3A69B954008A40102F /* VocabularyModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 505B0BFA11C535E876A39746 /* VocabularyModels.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -57,11 +60,13 @@
 		20CE5C606343E5F52F2220B9 /* XAutoApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = XAutoApp.entitlements; sourceTree = "<group>"; };
 		28278A8823E1AED0304A59ED /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		4D1C34228226BF904A5BE882 /* InAppWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InAppWebView.swift; sourceTree = "<group>"; };
+		505B0BFA11C535E876A39746 /* VocabularyModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VocabularyModels.swift; sourceTree = "<group>"; };
 		52FA32346DAFC5CCC62D608F /* XAutoApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = XAutoApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		594790C828006F1317CB82EB /* XAutoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XAutoApp.swift; sourceTree = "<group>"; };
 		6CAFA15EDDBE17FECE2BD391 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		6D8B73753D896DC503576F34 /* ViewModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewModels.swift; sourceTree = "<group>"; };
 		8234DD65F18577C2AE812926 /* LocalFunInsightService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalFunInsightService.swift; sourceTree = "<group>"; };
+		845E5BA98039A844CB8081C1 /* VocabularyLookupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VocabularyLookupService.swift; sourceTree = "<group>"; };
 		9EDE9BD1595FCB47FD7BA18A /* XAutoWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = XAutoWidget.entitlements; sourceTree = "<group>"; };
 		AA0C9A814163DB517DDF8989 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AB5AB3FFFE91CBB05EBFACEE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -97,6 +102,7 @@
 				8234DD65F18577C2AE812926 /* LocalFunInsightService.swift */,
 				04370874B01E0BB4EA0BC9D1 /* RichPostTextView.swift */,
 				6D8B73753D896DC503576F34 /* ViewModels.swift */,
+				845E5BA98039A844CB8081C1 /* VocabularyLookupService.swift */,
 				B0088165AF6459E6560F60B0 /* WeatherActivityService.swift */,
 				20CE5C606343E5F52F2220B9 /* XAutoApp.entitlements */,
 				594790C828006F1317CB82EB /* XAutoApp.swift */,
@@ -110,6 +116,7 @@
 			children = (
 				CD264641BB68B316A0267646 /* DomainModels.swift */,
 				DDD70D766CBAD341113B0689 /* SharedStore.swift */,
+				505B0BFA11C535E876A39746 /* VocabularyModels.swift */,
 			);
 			name = XAutoShared;
 			path = Sources/XAutoShared;
@@ -256,6 +263,8 @@
 				3A5DF0B6AC608548870A9AE9 /* RichPostTextView.swift in Sources */,
 				6D1C15CFB31D92957B0A11AA /* SharedStore.swift in Sources */,
 				87972249CA255372F739C7EB /* ViewModels.swift in Sources */,
+				B90EA3AE5C8698AD7E96891D /* VocabularyLookupService.swift in Sources */,
+				F2F3AD3A69B954008A40102F /* VocabularyModels.swift in Sources */,
 				3F3DD788E5F9ACA7BDE92C5C /* WeatherActivityService.swift in Sources */,
 				5FC3F946A653CF9FF2364146 /* XAutoApp.swift in Sources */,
 			);
@@ -267,6 +276,7 @@
 			files = (
 				9BE1DE6F5A94B84FB138B6F5 /* DomainModels.swift in Sources */,
 				83F79CE181D17A2F70CCCDE0 /* SharedStore.swift in Sources */,
+				733C246E7FE88F75D82673E5 /* VocabularyModels.swift in Sources */,
 				ADB778B2ABD52662E029B5CB /* XAutoWidget.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

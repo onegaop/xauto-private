@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import { extractJsonObject } from '../../common/utils/json';
 import { ProviderName } from '@xauto/shared-types';
@@ -38,6 +38,100 @@ export type DigestResult = {
   provider: ProviderName;
   model: string;
 };
+
+export type VocabularyLookupInput = {
+  term: string;
+  context?: string;
+  sourceLangHint?: string;
+  targetLang?: string;
+};
+
+export type VocabularyLookupResult = {
+  term: string;
+  normalizedTerm: string;
+  sourceLanguage: 'en' | 'zh' | 'mixed' | 'unknown';
+  targetLanguage: string;
+  translation: string;
+  shortDefinitionZh: string;
+  shortDefinitionEn: string;
+  phonetic: {
+    ipa: string;
+    us: string;
+    uk: string;
+  };
+  partOfSpeech: string[];
+  domainTags: string[];
+  collocations: Array<{ text: string; translation: string }>;
+  example: {
+    source: string;
+    target: string;
+  };
+  confusable: Array<{ word: string; diff: string }>;
+  confidence: number;
+  provider: ProviderName;
+  model: string;
+  source: 'model';
+  cachedAt: string;
+};
+
+const VOCAB_LOOKUP_SYSTEM_PROMPT_V1 = `你是“技术语境双语词汇助手”。你的任务是根据用户给出的单词/短语和上下文，输出轻量但高质量的查词结果。
+
+必须遵守：
+1. 只输出一个 JSON object。
+2. 禁止输出 markdown、解释文字、代码块、额外前后缀。
+3. 不得使用占位词（N/A、未知、待补充、无）。
+4. 若上下文不足，给出最常见技术语义，并适当降低 confidence。
+5. 所有中文输出使用简体中文。
+6. 保持“轻量卡片”信息密度，避免长篇分析。
+
+JSON Schema（字段必须全部出现）：
+{
+  "term": "string",
+  "normalizedTerm": "string",
+  "sourceLanguage": "en|zh|mixed|unknown",
+  "targetLanguage": "string",
+  "translation": "string",
+  "shortDefinitionZh": "string",
+  "shortDefinitionEn": "string",
+  "phonetic": {
+    "ipa": "string",
+    "us": "string",
+    "uk": "string"
+  },
+  "partOfSpeech": ["string"],
+  "domainTags": ["string"],
+  "collocations": [
+    { "text": "string", "translation": "string" }
+  ],
+  "example": {
+    "source": "string",
+    "target": "string"
+  },
+  "confusable": [
+    { "word": "string", "diff": "string" }
+  ],
+  "confidence": 0.0
+}
+
+长度与数量约束：
+- translation <= 24 字符
+- shortDefinitionZh <= 60 字符
+- shortDefinitionEn <= 80 字符
+- partOfSpeech 1~3 项
+- domainTags 0~3 项
+- collocations 0~3 项
+- confusable 0~2 项
+- confidence 范围 [0,1]
+
+语义选择规则：
+- 优先使用 context 决定词义。
+- 若 term 为技术词，优先输出技术语义，不要泛化成日常语义。
+- 若 term 是缩写（如 RAG、K8s），保留缩写并给扩展解释。`;
+
+const VOCAB_LOOKUP_REPAIR_PROMPT_V1 = `你将收到一段可能不合规的模型输出。
+任务：在不新增事实的前提下，重排为符合指定 schema 的 JSON object。
+只输出 JSON object，不要任何解释。
+若某字段无法确定，使用最小合理值并降低 confidence。`;
 
 @Injectable()
 export class AiService {
@@ -104,6 +198,18 @@ export class AiService {
     'tweet',
     'thread'
   ]);
+
+  private static readonly PLACEHOLDER_WORDS = new Set([
+    'n/a',
+    'na',
+    'none',
+    'unknown',
+    '待补充',
+    '未知',
+    '无',
+    '暂无'
+  ]);
+  private readonly logger = new Logger(AiService.name);
 
   constructor(
     private readonly providerConfigService: ProviderConfigService,
@@ -211,6 +317,77 @@ export class AiService {
     }
 
     return this.fallbackDigest(summaries);
+  }
+
+  async lookupVocabularyCard(input: VocabularyLookupInput): Promise<VocabularyLookupResult> {
+    const term = input.term.trim().slice(0, 64);
+    if (!term) {
+      throw new Error('Term is required');
+    }
+
+    const normalizedInput = {
+      term,
+      context: (input.context ?? '').replace(/\s+/g, ' ').trim().slice(0, 240),
+      sourceLangHint: this.toSourceLanguage(input.sourceLangHint),
+      targetLang: (input.targetLang ?? 'zh-CN').trim().slice(0, 16) || 'zh-CN'
+    };
+
+    const usageRatio = await this.budgetService.getUsageRatio();
+    const providers = await this.pickProviders('mini', usageRatio);
+
+    for (const provider of providers) {
+      try {
+        const userPrompt =
+          `term: ${normalizedInput.term}\n`
+          + `context: ${normalizedInput.context || '(empty)'}\n`
+          + `source_lang_hint: ${normalizedInput.sourceLangHint}\n`
+          + `target_lang: ${normalizedInput.targetLang}\n\n`
+          + '请按 system 要求返回 JSON。';
+
+        const rawText = await this.callModelText(provider.baseUrl, provider.apiKey, provider.miniModel, [
+          {
+            role: 'system',
+            content: VOCAB_LOOKUP_SYSTEM_PROMPT_V1
+          },
+          {
+            role: 'user',
+            content: userPrompt
+          }
+        ]);
+
+        let payload: Record<string, unknown>;
+        try {
+          payload = extractJsonObject(rawText);
+        } catch {
+          payload = await this.repairVocabularyPayload(rawText, provider.baseUrl, provider.apiKey, provider.miniModel);
+        }
+
+        const normalized = this.normalizeVocabularyLookup(
+          payload,
+          normalizedInput,
+          provider.provider,
+          provider.miniModel
+        );
+        this.assertVocabularyLookupShape(normalized);
+        await this.budgetService.recordUsageCny(
+          this.estimateVocabularyLookupCost(normalizedInput.term, normalizedInput.context)
+        );
+        this.logger.log(
+          `Vocabulary model success term="${normalizedInput.term}" provider="${provider.provider}" model="${provider.miniModel}" confidence=${normalized.confidence.toFixed(
+            2
+          )}`
+        );
+        return normalized;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'unknown error';
+        this.logger.warn(
+          `Vocabulary model failed term="${normalizedInput.term}" provider="${provider.provider}" model="${provider.miniModel}": ${message}`
+        );
+        continue;
+      }
+    }
+
+    throw new Error('Vocabulary lookup unavailable');
   }
 
   private async pickProviders(task: 'mini' | 'digest', usageRatio: number): Promise<Array<{
@@ -981,6 +1158,264 @@ export class AiService {
     return this.takeUniqueStrings(this.toStringList(raw), 5);
   }
 
+  private async repairVocabularyPayload(
+    rawOutput: string,
+    baseUrl: string,
+    apiKey: string,
+    model: string
+  ): Promise<Record<string, unknown>> {
+    return this.callModel(baseUrl, apiKey, model, [
+      {
+        role: 'system',
+        content: VOCAB_LOOKUP_REPAIR_PROMPT_V1
+      },
+      {
+        role: 'user',
+        content: `raw_output:\n<<< ${rawOutput.slice(0, 6000)} >>>`
+      }
+    ]);
+  }
+
+  private normalizeVocabularyLookup(
+    payload: Record<string, unknown>,
+    input: { term: string; context: string; sourceLangHint: 'en' | 'zh' | 'mixed' | 'unknown'; targetLang: string },
+    provider: ProviderName,
+    model: string
+  ): VocabularyLookupResult {
+    const term = this.truncateText(String(payload.term ?? input.term).trim(), 64);
+    const normalizedTerm = this.normalizeVocabularyTerm(
+      String(payload.normalizedTerm ?? term).trim() || term
+    );
+    const sourceLanguage = this.toSourceLanguage(
+      String(payload.sourceLanguage ?? this.inferSourceLanguage(term, input.sourceLangHint))
+    );
+    const targetLanguage = this.truncateText(
+      String(payload.targetLanguage ?? input.targetLang).trim() || input.targetLang,
+      16
+    );
+    const translation = this.sanitizeVocabularyText(
+      String(payload.translation ?? '').trim() || term,
+      24,
+      '术语释义'
+    );
+    const shortDefinitionZh = this.sanitizeVocabularyText(
+      String(payload.shortDefinitionZh ?? '').trim() || `${translation} 的常见技术语义。`,
+      60,
+      '技术语义待确认'
+    );
+    const shortDefinitionEn = this.sanitizeVocabularyText(
+      String(payload.shortDefinitionEn ?? '').trim() || `Technical meaning of ${term}.`,
+      80,
+      `Technical meaning of ${term}.`
+    );
+
+    const phoneticRaw = payload.phonetic;
+    const phoneticRecord =
+      phoneticRaw && typeof phoneticRaw === 'object' && !Array.isArray(phoneticRaw)
+        ? (phoneticRaw as Record<string, unknown>)
+        : {};
+    const phonetic = {
+      ipa: this.truncateText(String(phoneticRecord.ipa ?? '').trim(), 32),
+      us: this.truncateText(String(phoneticRecord.us ?? '').trim(), 32),
+      uk: this.truncateText(String(phoneticRecord.uk ?? '').trim(), 32)
+    };
+
+    const partOfSpeech = this.takeUniqueStrings(
+      this.toStringList(payload.partOfSpeech).map((item) => this.truncateText(item, 16)),
+      3
+    );
+    const domainTags = this.takeUniqueStrings(
+      this.toStringList(payload.domainTags).map((item) => this.normalizeVocabularyTerm(item)),
+      3
+    );
+
+    const collocations = this.parseVocabularyPairs(payload.collocations, 3);
+    const confusable = this.parseVocabularyPairs(payload.confusable, 2, 'word', 'diff').map((item) => ({
+      word: item.text,
+      diff: item.translation
+    }));
+
+    const exampleRaw = payload.example;
+    const exampleRecord =
+      exampleRaw && typeof exampleRaw === 'object' && !Array.isArray(exampleRaw)
+        ? (exampleRaw as Record<string, unknown>)
+        : {};
+    const exampleSource = this.sanitizeVocabularyText(
+      String(exampleRecord.source ?? '').trim() || input.context || `Term: ${term}`,
+      120,
+      `Term: ${term}`
+    );
+    const exampleTarget = this.sanitizeVocabularyText(
+      String(exampleRecord.target ?? '').trim() || `${translation} 常见于技术语境。`,
+      120,
+      `${translation} 常见于技术语境。`
+    );
+
+    const confidenceRaw = Number(payload.confidence ?? (input.context ? 0.88 : 0.62));
+    const confidence = Number.isFinite(confidenceRaw) ? Math.max(0, Math.min(1, confidenceRaw)) : 0.62;
+
+    return {
+      term,
+      normalizedTerm,
+      sourceLanguage,
+      targetLanguage,
+      translation,
+      shortDefinitionZh,
+      shortDefinitionEn,
+      phonetic,
+      partOfSpeech: partOfSpeech.length > 0 ? partOfSpeech : ['term'],
+      domainTags,
+      collocations,
+      example: {
+        source: exampleSource,
+        target: exampleTarget
+      },
+      confusable,
+      confidence,
+      provider,
+      model,
+      source: 'model',
+      cachedAt: new Date().toISOString()
+    };
+  }
+
+  private assertVocabularyLookupShape(payload: VocabularyLookupResult): void {
+    const required = [
+      payload.term,
+      payload.normalizedTerm,
+      payload.translation,
+      payload.shortDefinitionZh,
+      payload.shortDefinitionEn,
+      payload.example.source,
+      payload.example.target
+    ];
+
+    for (const value of required) {
+      const normalized = value.trim();
+      if (!normalized) {
+        throw new Error('Vocabulary lookup contains empty required fields');
+      }
+
+      const lowered = normalized.toLowerCase();
+      if (AiService.PLACEHOLDER_WORDS.has(lowered)) {
+        throw new Error('Vocabulary lookup contains placeholder value');
+      }
+    }
+
+    if (payload.partOfSpeech.length === 0) {
+      throw new Error('Vocabulary lookup missing partOfSpeech');
+    }
+  }
+
+  private parseVocabularyPairs(
+    input: unknown,
+    limit: number,
+    primaryKey = 'text',
+    secondaryKey = 'translation'
+  ): Array<{ text: string; translation: string }> {
+    if (!Array.isArray(input)) {
+      return [];
+    }
+
+    const output: Array<{ text: string; translation: string }> = [];
+    const seen = new Set<string>();
+
+    for (const item of input) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        continue;
+      }
+
+      const record = item as Record<string, unknown>;
+      const textRaw = String(record[primaryKey] ?? '').trim();
+      const translationRaw = String(record[secondaryKey] ?? '').trim();
+      const text = this.sanitizeVocabularyText(textRaw, 80, '');
+      const translation = this.sanitizeVocabularyText(translationRaw, 120, '');
+      if (!text || !translation) {
+        continue;
+      }
+
+      const key = `${text.toLowerCase()}|${translation.toLowerCase()}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+
+      output.push({ text, translation });
+      if (output.length >= limit) {
+        break;
+      }
+    }
+
+    return output;
+  }
+
+  private sanitizeVocabularyText(input: string, maxLength: number, fallback: string): string {
+    const compact = input.replace(/\s+/g, ' ').trim();
+    if (!compact) {
+      return fallback;
+    }
+
+    const lowered = compact.toLowerCase();
+    if (AiService.PLACEHOLDER_WORDS.has(lowered)) {
+      return fallback;
+    }
+
+    return this.truncateText(compact, maxLength);
+  }
+
+  private truncateText(value: string, maxLength: number): string {
+    const chars = Array.from(value);
+    if (chars.length <= maxLength) {
+      return value;
+    }
+    return chars.slice(0, maxLength).join('');
+  }
+
+  private normalizeVocabularyTerm(value: string): string {
+    const trimmed = value.trim().toLowerCase();
+    if (!trimmed) {
+      return '';
+    }
+    return trimmed
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9\u4e00-\u9fff+._/-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+  }
+
+  private inferSourceLanguage(term: string, hint: 'en' | 'zh' | 'mixed' | 'unknown'): 'en' | 'zh' | 'mixed' | 'unknown' {
+    if (hint !== 'unknown') {
+      return hint;
+    }
+
+    const hasChinese = /[\u4e00-\u9fff]/.test(term);
+    const hasEnglish = /[A-Za-z]/.test(term);
+    if (hasChinese && hasEnglish) {
+      return 'mixed';
+    }
+    if (hasChinese) {
+      return 'zh';
+    }
+    if (hasEnglish) {
+      return 'en';
+    }
+    return 'unknown';
+  }
+
+  private toSourceLanguage(value?: string): 'en' | 'zh' | 'mixed' | 'unknown' {
+    const normalized = (value ?? '').trim().toLowerCase();
+    if (normalized === 'en' || normalized === 'english') {
+      return 'en';
+    }
+    if (normalized === 'zh' || normalized === 'zh-cn' || normalized === 'chinese') {
+      return 'zh';
+    }
+    if (normalized === 'mixed') {
+      return 'mixed';
+    }
+    return 'unknown';
+  }
+
   private normalizeDigest(payload: Record<string, unknown>, provider: ProviderName, model: string): DigestResult {
     const toStringArray = (input: unknown): string[] =>
       Array.isArray(input) ? input.map((item) => String(item)).filter(Boolean) : [];
@@ -1035,6 +1470,11 @@ export class AiService {
 
   private estimateMiniMarkdownCost(text: string): number {
     return Number((Math.max(1, text.length) * 0.00001).toFixed(6));
+  }
+
+  private estimateVocabularyLookupCost(term: string, context: string): number {
+    const chars = Math.max(1, term.length + context.length);
+    return Number((chars * 0.00001).toFixed(6));
   }
 
   private estimateDigestCost(summaryCount: number): number {

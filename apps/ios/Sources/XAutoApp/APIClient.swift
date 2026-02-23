@@ -84,7 +84,24 @@ final class APIClient {
         return try await request(path: "/v1/mobile/summary/stats", queryItems: queryItems, responseType: SummaryStatsResponse.self)
     }
 
-    private func request<T: Decodable>(path: String, queryItems: [URLQueryItem], responseType: T.Type) async throws -> T {
+    func lookupVocabulary(request payload: VocabularyLookupRequest) async throws -> VocabularyLookupResponse {
+        let bodyData = try JSONEncoder().encode(payload)
+        return try await request(
+            path: "/v1/mobile/vocabulary/lookup",
+            queryItems: [],
+            method: "POST",
+            bodyData: bodyData,
+            responseType: VocabularyLookupResponse.self
+        )
+    }
+
+    private func request<T: Decodable>(
+        path: String,
+        queryItems: [URLQueryItem],
+        method: String = "GET",
+        bodyData: Data? = nil,
+        responseType: T.Type
+    ) async throws -> T {
         let config = RuntimeConfigStore.load()
         guard !config.pat.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw APIClientError.missingPAT
@@ -102,10 +119,14 @@ final class APIClient {
         }
 
         var request = URLRequest(url: url)
-        request.httpMethod = "GET"
+        request.httpMethod = method
         request.timeoutInterval = 30
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(config.pat)", forHTTPHeaderField: "Authorization")
+        if let bodyData {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = bodyData
+        }
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
