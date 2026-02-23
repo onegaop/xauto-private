@@ -123,6 +123,7 @@ struct BookmarkItemResponse: Codable, Identifiable {
     let mongoId: String?
     let tweetId: String
     let authorName: String
+    let authorAvatarUrl: String?
     let text: String
     let url: String
     let createdAtX: String
@@ -133,6 +134,7 @@ struct BookmarkItemResponse: Codable, Identifiable {
         case mongoId = "_id"
         case tweetId
         case authorName
+        case authorAvatarUrl
         case text
         case url
         case createdAtX

@@ -77,11 +77,17 @@ export class SyncService {
     let nextToken: string | undefined;
     let totalFetched = 0;
     let totalInserted = 0;
+    let detailRequested = 0;
+    let detailFetched = 0;
+    let pagesFetched = 0;
+    let stoppedOnFirstNoNewPage = false;
+    let existingCountOnLastPage = 0;
 
     while (page < 5) {
       const response = await this.xApiService.fetchBookmarks(accessToken, userId, {
         paginationToken: nextToken
       });
+      pagesFetched += 1;
 
       const items = response.items;
       if (items.length === 0) {
@@ -95,52 +101,28 @@ export class SyncService {
       const tweetIds = items.map((item) => item.tweetId);
       const existing = await this.bookmarkItemModel
         .find({ tweetId: { $in: tweetIds } })
-        .select('tweetId syncedAt createdAt')
+        .select('tweetId')
         .lean();
       const existingIds = new Set(existing.map((item) => item.tweetId));
-      const existingSyncTimeById = new Map(
-        existing.map((item) => {
-          const createdAt = (item as { createdAt?: Date }).createdAt;
-          return [
-            item.tweetId,
-            item.syncedAt instanceof Date ? item.syncedAt : createdAt instanceof Date ? createdAt : undefined
-          ] as const;
-        })
-      );
-
-      const existingItems = items.filter((item) => existingIds.has(item.tweetId));
+      existingCountOnLastPage = existingIds.size;
       const newItems = items.filter((item) => !existingIds.has(item.tweetId));
       totalInserted += newItems.length;
 
-      if (existingItems.length > 0) {
-        await this.bookmarkItemModel.bulkWrite(
-          existingItems.map((item) => {
-            const syncedAt = existingSyncTimeById.get(item.tweetId) ?? seenAt;
-            return {
-              updateOne: {
-                filter: { tweetId: item.tweetId },
-                update: {
-                  $set: {
-                    createdAtX: item.createdAtX,
-                    authorName: item.authorName,
-                    url: item.url,
-                    rawJson: item.rawJson,
-                    syncedAt
-                  }
-                },
-                upsert: true
-              }
-            };
-          })
-        );
+      // Bookmark pages are sorted by recent bookmark time. Once a page has no new IDs,
+      // older pages are very unlikely to contain new records for our incremental sync.
+      if (newItems.length === 0) {
+        stoppedOnFirstNoNewPage = true;
+        break;
       }
 
       let detailsById = new Map<string, XTweetDetailItem>();
       if (newItems.length > 0) {
+        detailRequested += newItems.length;
         const details = await this.xApiService.fetchTweetDetailsByIds(
           accessToken,
           newItems.map((item) => item.tweetId)
         );
+        detailFetched += details.length;
         detailsById = new Map(details.map((item) => [item.tweetId, item]));
 
         await this.bookmarkItemModel.bulkWrite(
@@ -153,9 +135,10 @@ export class SyncService {
                 update: {
                   $set: {
                     createdAtX: detail?.createdAtX ?? item.createdAtX,
-                    authorName: detail?.authorName ?? item.authorName,
+                    authorName: detail?.authorName ?? 'unknown',
+                    authorAvatarUrl: detail?.authorAvatarUrl ?? '',
                     text: text || '[text unavailable]',
-                    url: detail?.url ?? item.url,
+                    url: detail?.url ?? `https://x.com/i/web/status/${item.tweetId}`,
                     rawJson: detail?.rawJson ?? item.rawJson,
                     syncedAt: seenAt
                   }
@@ -217,7 +200,11 @@ export class SyncService {
     return {
       totalFetched,
       totalInserted,
-      pages: page + 1
+      pages: pagesFetched,
+      detailRequested,
+      detailFetched,
+      stoppedOnFirstNoNewPage,
+      existingCountOnLastPage
     };
   }
 }

@@ -24,6 +24,8 @@ struct WidgetProvider: TimelineProvider {
     }
 }
 
+// MARK: - Entry View
+
 struct WidgetEntryView: View {
     @Environment(\.widgetFamily) private var family
     let entry: WidgetEntry
@@ -32,78 +34,154 @@ struct WidgetEntryView: View {
         switch family {
         case .systemMedium:
             mediumLayout
+        case .accessoryRectangular:
+            accessoryRectangularLayout
+        case .accessoryInline:
+            accessoryInlineLayout
         default:
             smallLayout
         }
     }
 
+    private var relativeTime: String {
+        let raw = entry.snapshot.generatedAt
+        guard !raw.isEmpty else { return "" }
+        let parser = ISO8601DateFormatter()
+        guard let date = parser.date(from: raw) else { return "" }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: entry.date)
+    }
+
+    // MARK: Small
+
     private var smallLayout: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Today")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(Color.orange.gradient)
+                    .frame(width: 7, height: 7)
+                Text("XAuto")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
 
             Text(entry.snapshot.topTheme)
                 .font(.headline)
                 .lineLimit(3)
-                .minimumScaleFactor(0.9)
+                .minimumScaleFactor(0.85)
 
             Spacer(minLength: 0)
 
-            Text(entry.snapshot.action)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
+            VStack(alignment: .leading, spacing: 2) {
+                if isActionMeaningful {
+                    Text(entry.snapshot.action)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                if !relativeTime.isEmpty {
+                    Text(relativeTime)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(12)
+        .padding(16)
         .containerBackground(for: .widget) {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.97, green: 0.95, blue: 0.90),
-                    Color(red: 0.92, green: 0.91, blue: 0.85)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            Color(.systemBackground)
         }
     }
+
+    // MARK: Medium
 
     private var mediumLayout: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("XAuto Digest")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Text(entry.snapshot.topTheme)
-                    .font(.title3.weight(.bold))
-                    .lineLimit(3)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(Color.orange.gradient)
+                        .frame(width: 7, height: 7)
+                    Text("XAuto Digest")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if !entry.snapshot.periodKey.isEmpty {
+                    Text(entry.snapshot.periodKey)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
+
+            Text(entry.snapshot.topTheme)
+                .font(.title3.weight(.bold))
+                .lineLimit(2)
+
             Spacer(minLength: 0)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Next")
+
+            HStack(alignment: .bottom) {
+                if isActionMeaningful {
+                    Label {
+                        Text(entry.snapshot.action)
+                            .lineLimit(2)
+                    } icon: {
+                        Image(systemName: "arrow.right.circle.fill")
+                    }
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(entry.snapshot.action)
-                    .font(.subheadline)
-                    .lineLimit(4)
+                    .foregroundStyle(.orange)
+                }
+                Spacer(minLength: 0)
+                if !relativeTime.isEmpty {
+                    Text(relativeTime)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
-            .frame(maxWidth: 140, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(14)
+        .padding(16)
         .containerBackground(for: .widget) {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.97, green: 0.95, blue: 0.90),
-                    Color(red: 0.92, green: 0.91, blue: 0.85)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            Color(.systemBackground)
         }
     }
+
+    // MARK: Lock Screen — Rectangular
+
+    private var accessoryRectangularLayout: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Image(systemName: "sparkle")
+                    .font(.caption2)
+                    .widgetAccentable()
+                Text("XAuto")
+                    .font(.caption.weight(.semibold))
+                    .widgetAccentable()
+            }
+            Text(entry.snapshot.topTheme)
+                .font(.caption)
+                .lineLimit(2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: Lock Screen — Inline
+
+    private var accessoryInlineLayout: some View {
+        Label(entry.snapshot.topTheme, systemImage: "sparkle")
+    }
+
+    // MARK: Helpers
+
+    private var isActionMeaningful: Bool {
+        let action = entry.snapshot.action
+        return !action.isEmpty && action != WidgetDigestSnapshot.placeholder.action
+    }
 }
+
+// MARK: - Widget Configuration
 
 @main
 struct XAutoWidget: Widget {
@@ -115,7 +193,12 @@ struct XAutoWidget: Widget {
                 .widgetURL(URL(string: "xauto://today"))
         }
         .configurationDisplayName("XAuto Digest")
-        .description("Shows your latest digest theme and next action.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .description("今日摘要主题与下一步行动。")
+        .supportedFamilies([
+            .systemSmall,
+            .systemMedium,
+            .accessoryRectangular,
+            .accessoryInline,
+        ])
     }
 }

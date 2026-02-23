@@ -90,6 +90,10 @@ final class TodayViewModel: ObservableObject {
                 WidgetDigestStore.save(snapshot: todayDigest.widgetSnapshot)
                 WidgetCenter.shared.reloadTimelines(ofKind: XAutoSharedKeys.widgetKind)
             }
+        } catch is CancellationError {
+            return
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            return
         } catch {
             errorMessage = error.localizedDescription
             let weatherResult = await weatherTask
@@ -132,6 +136,10 @@ final class TodayViewModel: ObservableObject {
             )
             items.append(contentsOf: list.items)
             self.nextCursor = list.nextCursor
+        } catch is CancellationError {
+            return
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            return
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -148,6 +156,10 @@ final class TodayViewModel: ObservableObject {
             let payload = try await APIClient.shared.fetchDigestHistory(period: historyPeriod, limit: 10, cursor: historyNextCursor)
             digestHistory.append(contentsOf: payload.items)
             self.historyNextCursor = payload.nextCursor
+        } catch is CancellationError {
+            return
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            return
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -210,6 +222,10 @@ final class TodayViewModel: ObservableObject {
             )
             items = list.items
             nextCursor = list.nextCursor
+        } catch is CancellationError {
+            return
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            return
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -220,6 +236,10 @@ final class TodayViewModel: ObservableObject {
             let payload = try await APIClient.shared.fetchDigestHistory(period: historyPeriod, limit: 10, cursor: nil)
             digestHistory = payload.items
             historyNextCursor = payload.nextCursor
+        } catch is CancellationError {
+            return
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            return
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -228,6 +248,10 @@ final class TodayViewModel: ObservableObject {
     private func refreshStats() async {
         do {
             summaryStats = try await APIClient.shared.fetchSummaryStats(range: statsRange)
+        } catch is CancellationError {
+            return
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            return
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -244,6 +268,10 @@ final class TodayViewModel: ObservableObject {
                 activity: WeatherActivityCardData(raw: raw, narration: narration),
                 errorMessage: nil
             )
+        } catch is CancellationError {
+            return WeatherFetchResult(activity: nil, errorMessage: nil)
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            return WeatherFetchResult(activity: nil, errorMessage: nil)
         } catch {
             let friendlyMessage = WeatherActivityService.friendlyErrorMessage(for: error)
             if let cached = WeatherActivityService.cachedSnapshot() {
@@ -281,6 +309,10 @@ final class WeekViewModel: ObservableObject {
 
         do {
             digest = try await APIClient.shared.fetchWeekDigest()
+        } catch is CancellationError {
+            return
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            return
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -306,6 +338,10 @@ final class ItemDetailViewModel: ObservableObject {
 
         do {
             item = try await APIClient.shared.fetchItem(tweetId: item.tweetId)
+        } catch is CancellationError {
+            return
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            return
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -317,7 +353,7 @@ final class ItemDetailViewModel: ObservableObject {
         guard enabled else {
             localInsight = LocalFunInsight(
                 title: "端侧增强已关闭",
-                highlights: ["可在 Settings 打开“端侧AI娱乐增强”。"],
+                highlights: ["可在 Settings 打开「端侧AI娱乐增强」。"],
                 suggestions: ["打开后可生成本地趣味洞察。"]
             )
             return

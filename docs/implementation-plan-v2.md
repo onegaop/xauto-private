@@ -66,3 +66,4 @@
 3. Week 3-4: Foundation Models prototype path (`on_device` mode).
 4. Week 5: Hybrid routing and quality comparison.
 5. Week 6: Cost/performance tuning and release candidate.
+
