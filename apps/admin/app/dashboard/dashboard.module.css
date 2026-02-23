@@ -172,6 +172,12 @@
   min-height: 200px;
 }
 
+.formTextareaLocked {
+  opacity: 0.72;
+  background: var(--bg);
+  cursor: not-allowed;
+}
+
 /* 按钮 */
 .btn {
   padding: 10px 18px;

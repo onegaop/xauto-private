@@ -702,19 +702,23 @@ export default function DashboardClient(): JSX.Element {
             <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
               <label className={styles.formLabel}>Mini Summary Prompt</label>
               <textarea
-                className={`${styles.formTextarea} ${styles.formTextareaLarge}`}
+                className={`${styles.formTextarea} ${styles.formTextareaLarge} ${styles.formTextareaLocked}`}
                 rows={14}
                 value={promptForm.miniSummarySystem}
                 readOnly
+                disabled
+                title="结构化 Prompt 已锁定，不可编辑"
               />
             </div>
             <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
               <label className={styles.formLabel}>Digest Prompt</label>
               <textarea
-                className={styles.formTextarea}
+                className={`${styles.formTextarea} ${styles.formTextareaLocked}`}
                 rows={8}
                 value={promptForm.digestSystem}
                 readOnly
+                disabled
+                title="结构化 Prompt 已锁定，不可编辑"
               />
             </div>
           </div>
