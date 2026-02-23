@@ -57,6 +57,7 @@ type ItemData = {
   tweetId: string;
   text?: string;
   authorName?: string;
+  authorAvatarUrl?: string;
   createdAtX?: string;
   url?: string;
   summary?: SummaryData | null;
@@ -238,6 +239,10 @@ const toItemsPayload = (input: unknown): ItemsPayload => {
             tweetId,
             text: typeof value.text === 'string' ? value.text : '',
             authorName: typeof value.authorName === 'string' ? value.authorName : undefined,
+            authorAvatarUrl:
+              typeof value.authorAvatarUrl === 'string' && value.authorAvatarUrl.trim()
+                ? value.authorAvatarUrl
+                : undefined,
             createdAtX: typeof value.createdAtX === 'string' ? value.createdAtX : undefined,
             url: typeof value.url === 'string' ? value.url : undefined,
             summary: toSummary(value.summary)
@@ -1255,7 +1260,25 @@ export default function H5Client(): JSX.Element {
                       onClick={() => void openItemDetail(item.tweetId)}
                     >
                       <div className={styles.feedItemMeta}>
-                        <span className={styles.feedAuthor}>{item.authorName || '未知'}</span>
+                        <span className={styles.feedAuthorWrap}>
+                          <span className={styles.feedAvatar} aria-hidden="true">
+                            <span className={styles.feedAvatarFallback}>
+                              {item.authorName?.trim().charAt(0).toUpperCase() || '?'}
+                            </span>
+                            {item.authorAvatarUrl ? (
+                              <img
+                                src={item.authorAvatarUrl}
+                                alt={`${item.authorName || '未知'} avatar`}
+                                className={styles.feedAvatarImage}
+                                loading="lazy"
+                                onError={(event) => {
+                                  event.currentTarget.style.display = 'none';
+                                }}
+                              />
+                            ) : null}
+                          </span>
+                          <span className={styles.feedAuthor}>{item.authorName || '未知'}</span>
+                        </span>
                         <span className={styles.feedTime}>{item.createdAtX ? formatRelativeTime(item.createdAtX) : ''}</span>
                       </div>
                       <h3 className={styles.feedItemTitle}>{item.summary?.oneLinerZh || '暂无摘要'}</h3>

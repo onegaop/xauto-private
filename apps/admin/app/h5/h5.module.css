@@ -531,10 +531,48 @@
   margin-bottom: 8px;
 }
 
+.feedAuthorWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.feedAvatar {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #f59e0b, #f97316);
+}
+
+.feedAvatarFallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.feedAvatarImage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .feedAuthor {
   font-size: 0.85rem;
   font-weight: 500;
   color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .feedTime {

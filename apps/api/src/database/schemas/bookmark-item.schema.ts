@@ -14,6 +14,9 @@ export class BookmarkItem {
   @Prop({ required: true })
   authorName!: string;
 
+  @Prop({ required: false, default: '' })
+  authorAvatarUrl!: string;
+
   @Prop({ required: true })
   text!: string;
 

@@ -6,8 +6,6 @@ import { sleep } from '../../common/utils/sleep';
 export type XBookmarkItem = {
   tweetId: string;
   createdAtX: Date;
-  authorName: string;
-  url: string;
   rawJson: Record<string, unknown>;
 };
 
@@ -15,6 +13,7 @@ export type XTweetDetailItem = {
   tweetId: string;
   createdAtX: Date;
   authorName: string;
+  authorAvatarUrl: string;
   text: string;
   url: string;
   rawJson: Record<string, unknown>;
@@ -42,10 +41,8 @@ export class XApiService {
     const env = getEnv();
 
     const params: Record<string, string> = {
-      // Keep bookmark list call cheap: fetch IDs and minimal metadata only.
+      // Use bookmark list for ID-level incremental detection only.
       'tweet.fields': 'created_at,author_id',
-      expansions: 'author_id',
-      'user.fields': 'name,username',
       max_results: String(options.maxResults ?? 100)
     };
 
@@ -67,24 +64,24 @@ export class XApiService {
       })
     );
 
-    const users = response.data.includes?.users ?? [];
-    const usersById = new Map(users.map((user) => [String(user.id), user]));
+    const items: XBookmarkItem[] = (response.data.data ?? []).reduce<XBookmarkItem[]>((acc, tweet) => {
+        const tweetId = String(tweet.id ?? '').trim();
+        if (!tweetId) {
+          return acc;
+        }
 
-    const items: XBookmarkItem[] = (response.data.data ?? []).map((tweet) => {
-      const authorId = String(tweet.author_id ?? '');
-      const user = usersById.get(authorId);
-      const authorName = String(user?.name ?? user?.username ?? 'unknown');
-      const tweetId = String(tweet.id ?? '');
-      const username = String(user?.username ?? '');
+        acc.push({
+          tweetId,
+          createdAtX: new Date(String(tweet.created_at ?? new Date().toISOString())),
+          rawJson: {
+            id: tweetId,
+            author_id: String(tweet.author_id ?? ''),
+            created_at: String(tweet.created_at ?? '')
+          }
+        });
 
-      return {
-        tweetId,
-        createdAtX: new Date(String(tweet.created_at ?? new Date().toISOString())),
-        authorName,
-        url: this.buildTweetUrl(tweetId, username),
-        rawJson: tweet
-      };
-    });
+        return acc;
+      }, []);
 
     return {
       items,
@@ -108,7 +105,7 @@ export class XApiService {
         ids: chunk.join(','),
         'tweet.fields': 'created_at,author_id,text',
         expansions: 'author_id',
-        'user.fields': 'name,username'
+        'user.fields': 'name,username,profile_image_url'
       };
 
       const response = await this.requestWithRetry(async () =>
@@ -136,12 +133,14 @@ export class XApiService {
         const authorId = String(tweet.author_id ?? '');
         const user = usersById.get(authorId);
         const authorName = String(user?.name ?? user?.username ?? 'unknown');
+        const authorAvatarUrl = this.readAvatarUrl(user);
         const username = String(user?.username ?? '');
 
         out.push({
           tweetId,
           createdAtX: new Date(String(tweet.created_at ?? new Date().toISOString())),
           authorName,
+          authorAvatarUrl,
           text: String(tweet.text ?? ''),
           url: this.buildTweetUrl(tweetId, username),
           rawJson: tweet
@@ -159,6 +158,15 @@ export class XApiService {
     }
 
     return `https://x.com/${encodeURIComponent(username)}/status/${tweetId}`;
+  }
+
+  private readAvatarUrl(user: Record<string, unknown> | undefined): string {
+    const raw = typeof user?.profile_image_url === 'string' ? user.profile_image_url.trim() : '';
+    if (!raw) {
+      return '';
+    }
+
+    return raw.replace('_normal.', '_400x400.');
   }
 
   private async requestWithRetry<T>(requestFn: () => Promise<T>): Promise<T> {

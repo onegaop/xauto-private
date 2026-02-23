@@ -16,10 +16,12 @@ struct XAutoApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(selectedTab: $navigation.selectedTab)
+            ContentView()
+                .environmentObject(navigation)
                 .onOpenURL { url in
                     if url.host == "today" {
                         navigation.selectedTab = .today
+                        navigation.scrollToDigest = true
                     } else if url.host == "week" {
                         navigation.selectedTab = .week
                     } else if url.host == "settings" {
