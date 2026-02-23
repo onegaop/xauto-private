@@ -44,25 +44,31 @@ struct TodayView: View {
         NavigationStack {
             ZStack {
                 AppBackground()
-                ScrollView {
-                    VStack(spacing: 16) {
-                        if let message = viewModel.errorMessage {
-                            ErrorCard(message: message)
-                        }
+                GeometryReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            if let message = viewModel.errorMessage {
+                                ErrorCard(message: message)
+                            }
 
-                        weatherSection
-                        digestSection
-                        insightsSection
-                        historySection
-                        itemsSection
+                            weatherSection
+                            digestSection
+                            insightsSection
+                            historySection
+                            itemsSection
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .padding(.bottom, 24)
+                        .frame(width: proxy.size.width, alignment: .topLeading)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-                    .padding(.bottom, 24)
-                }
-                .refreshable {
-                    await viewModel.load()
+                    .scrollBounceBehavior(.basedOnSize, axes: .vertical)
+                    .background(VerticalOnlyScrollConfigurator())
+                    .clipped()
+                    .refreshable {
+                        await viewModel.load()
+                    }
                 }
 
                 if viewModel.isLoading && viewModel.items.isEmpty {
@@ -308,30 +314,26 @@ struct TodayView: View {
                     }
 
                     filterRow(title: "类型") {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                FilterChip(title: "全部", active: viewModel.filterClaimLabel == nil) {
-                                    Task { await viewModel.setFilterClaimLabel(nil) }
-                                }
-                                ForEach(ClaimLabel.allCases) { label in
-                                    FilterChip(title: label.title, active: viewModel.filterClaimLabel == label) {
-                                        Task { await viewModel.setFilterClaimLabel(label) }
-                                    }
+                        FlowWrapLayout(spacing: 8, rowSpacing: 8) {
+                            FilterChip(title: "全部", active: viewModel.filterClaimLabel == nil) {
+                                Task { await viewModel.setFilterClaimLabel(nil) }
+                            }
+                            ForEach(ClaimLabel.allCases) { label in
+                                FilterChip(title: label.title, active: viewModel.filterClaimLabel == label) {
+                                    Task { await viewModel.setFilterClaimLabel(label) }
                                 }
                             }
                         }
                     }
 
                     filterRow(title: "质量") {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                FilterChip(title: "全部", active: viewModel.filterQualityMin == nil) {
-                                    Task { await viewModel.setFilterQualityMin(nil) }
-                                }
-                                ForEach(viewModel.qualityFilterOptions, id: \.self) { value in
-                                    FilterChip(title: "≥\(String(format: "%.2f", value))", active: viewModel.filterQualityMin == value) {
-                                        Task { await viewModel.setFilterQualityMin(value) }
-                                    }
+                        FlowWrapLayout(spacing: 8, rowSpacing: 8) {
+                            FilterChip(title: "全部", active: viewModel.filterQualityMin == nil) {
+                                Task { await viewModel.setFilterQualityMin(nil) }
+                            }
+                            ForEach(viewModel.qualityFilterOptions, id: \.self) { value in
+                                FilterChip(title: "≥\(String(format: "%.2f", value))", active: viewModel.filterQualityMin == value) {
+                                    Task { await viewModel.setFilterQualityMin(value) }
                                 }
                             }
                         }
@@ -339,15 +341,13 @@ struct TodayView: View {
 
                     if !viewModel.availableTags.isEmpty {
                         filterRow(title: "标签") {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 8) {
-                                    FilterChip(title: "全部", active: viewModel.filterTag.isEmpty) {
-                                        Task { await viewModel.setFilterTag("") }
-                                    }
-                                    ForEach(viewModel.availableTags, id: \.self) { tag in
-                                        FilterChip(title: tag, active: viewModel.filterTag == tag) {
-                                            Task { await viewModel.setFilterTag(tag) }
-                                        }
+                            FlowWrapLayout(spacing: 8, rowSpacing: 8) {
+                                FilterChip(title: "全部", active: viewModel.filterTag.isEmpty) {
+                                    Task { await viewModel.setFilterTag("") }
+                                }
+                                ForEach(viewModel.availableTags, id: \.self) { tag in
+                                    FilterChip(title: tag, active: viewModel.filterTag == tag) {
+                                        Task { await viewModel.setFilterTag(tag) }
                                     }
                                 }
                             }
@@ -414,71 +414,77 @@ struct WeekView: View {
         NavigationStack {
             ZStack {
                 AppBackground()
-                ScrollView {
-                    VStack(spacing: 16) {
-                        if let message = viewModel.errorMessage {
-                            ErrorCard(message: message)
-                        }
-
-                        if let digest = viewModel.digest {
-                            DigestHeroCard(digest: digest, title: "Week Digest")
-
-                            if viewModel.hasDigestContent {
-                                if !digest.topItems.isEmpty {
-                                    GlassCard {
-                                        VStack(alignment: .leading, spacing: 8) {
-                                            SectionTitle(title: "重点条目", subtitle: nil)
-                                            ForEach(digest.topItems) { topItem in
-                                                NavigationLink {
-                                                    ItemLoaderView(tweetId: topItem.tweetId)
-                                                } label: {
-                                                    TopItemRow(item: topItem)
-                                                }
-                                                .buttonStyle(.plain)
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if !digest.risks.isEmpty {
-                                    GlassCard {
-                                        VStack(alignment: .leading, spacing: 8) {
-                                            SectionTitle(title: "风险雷达", subtitle: nil)
-                                            ForEach(digest.risks, id: \.self) { risk in
-                                                Label(risk, systemImage: "exclamationmark.triangle.fill")
-                                                    .font(.subheadline)
-                                                    .foregroundStyle(Color.orange)
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if !digest.tomorrowActions.isEmpty {
-                                    GlassCard {
-                                        VStack(alignment: .leading, spacing: 8) {
-                                            SectionTitle(title: "行动建议", subtitle: nil)
-                                            ForEach(digest.tomorrowActions, id: \.self) { action in
-                                                Label(action, systemImage: "checkmark.circle.fill")
-                                                    .font(.subheadline)
-                                            }
-                                        }
-                                    }
-                                }
-                            } else {
-                                EmptyStateCard(title: "本周摘要暂无内容", detail: "当前已有周摘要记录，但内容为空。")
+                GeometryReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            if let message = viewModel.errorMessage {
+                                ErrorCard(message: message)
                             }
-                        } else if !viewModel.isLoading {
-                            EmptyStateCard(
-                                title: "本周摘要还未生成",
-                                detail: "在 Admin 触发 weekly digest 后，这里会自动展示。"
-                            )
+
+                            if let digest = viewModel.digest {
+                                DigestHeroCard(digest: digest, title: "Week Digest")
+
+                                if viewModel.hasDigestContent {
+                                    if !digest.topItems.isEmpty {
+                                        GlassCard {
+                                            VStack(alignment: .leading, spacing: 8) {
+                                                SectionTitle(title: "重点条目", subtitle: nil)
+                                                ForEach(digest.topItems) { topItem in
+                                                    NavigationLink {
+                                                        ItemLoaderView(tweetId: topItem.tweetId)
+                                                    } label: {
+                                                        TopItemRow(item: topItem)
+                                                    }
+                                                    .buttonStyle(.plain)
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    if !digest.risks.isEmpty {
+                                        GlassCard {
+                                            VStack(alignment: .leading, spacing: 8) {
+                                                SectionTitle(title: "风险雷达", subtitle: nil)
+                                                ForEach(digest.risks, id: \.self) { risk in
+                                                    Label(risk, systemImage: "exclamationmark.triangle.fill")
+                                                        .font(.subheadline)
+                                                        .foregroundStyle(Color.orange)
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    if !digest.tomorrowActions.isEmpty {
+                                        GlassCard {
+                                            VStack(alignment: .leading, spacing: 8) {
+                                                SectionTitle(title: "行动建议", subtitle: nil)
+                                                ForEach(digest.tomorrowActions, id: \.self) { action in
+                                                    Label(action, systemImage: "checkmark.circle.fill")
+                                                        .font(.subheadline)
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    EmptyStateCard(title: "本周摘要暂无内容", detail: "当前已有周摘要记录，但内容为空。")
+                                }
+                            } else if !viewModel.isLoading {
+                                EmptyStateCard(
+                                    title: "本周摘要还未生成",
+                                    detail: "在 Admin 触发 weekly digest 后，这里会自动展示。"
+                                )
+                            }
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .frame(width: proxy.size.width, alignment: .topLeading)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                }
-                .refreshable {
-                    await viewModel.load()
+                    .scrollBounceBehavior(.basedOnSize, axes: .vertical)
+                    .background(VerticalOnlyScrollConfigurator())
+                    .clipped()
+                    .refreshable {
+                        await viewModel.load()
+                    }
                 }
 
                 if viewModel.isLoading && viewModel.digest == nil {
@@ -1059,16 +1065,106 @@ private struct TagFlow: View {
     let tags: [String]
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(tags, id: \.self) { tag in
-                    Text(tag)
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color.orange.opacity(0.12), in: Capsule())
-                }
+        FlowWrapLayout(spacing: 8, rowSpacing: 8) {
+            ForEach(tags, id: \.self) { tag in
+                Text(tag)
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.orange.opacity(0.12), in: Capsule())
             }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct FlowWrapLayout: Layout {
+    var spacing: CGFloat = 8
+    var rowSpacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let hasBoundedWidth = proposal.width != nil
+        let maxWidth = max(1, proposal.width ?? 1)
+        var currentX: CGFloat = 0
+        var currentRowHeight: CGFloat = 0
+        var totalHeight: CGFloat = 0
+        var widestRow: CGFloat = 0
+
+        for subview in subviews {
+            var size = subview.sizeThatFits(.unspecified)
+            size.width = min(size.width, maxWidth)
+
+            if hasBoundedWidth, currentX > 0, currentX + size.width > maxWidth {
+                widestRow = max(widestRow, max(0, currentX - spacing))
+                totalHeight += currentRowHeight + rowSpacing
+                currentX = 0
+                currentRowHeight = 0
+            }
+
+            currentX += size.width + spacing
+            currentRowHeight = max(currentRowHeight, size.height)
+        }
+
+        if currentRowHeight > 0 {
+            totalHeight += currentRowHeight
+            widestRow = max(widestRow, max(0, currentX - spacing))
+        }
+
+        let finalWidth = proposal.width ?? widestRow
+        return CGSize(width: finalWidth, height: totalHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let maxWidth = max(1, bounds.width)
+        var cursorX = bounds.minX
+        var cursorY = bounds.minY
+        var currentRowHeight: CGFloat = 0
+
+        for subview in subviews {
+            var size = subview.sizeThatFits(.unspecified)
+            size.width = min(size.width, maxWidth)
+
+            if cursorX > bounds.minX, cursorX + size.width > bounds.minX + maxWidth {
+                cursorX = bounds.minX
+                cursorY += currentRowHeight + rowSpacing
+                currentRowHeight = 0
+            }
+
+            subview.place(
+                at: CGPoint(x: cursorX, y: cursorY),
+                proposal: ProposedViewSize(width: size.width, height: size.height)
+            )
+
+            cursorX += size.width + spacing
+            currentRowHeight = max(currentRowHeight, size.height)
+        }
+    }
+}
+
+private struct VerticalOnlyScrollConfigurator: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        DispatchQueue.main.async {
+            configureScrollView(from: view)
+        }
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        DispatchQueue.main.async {
+            configureScrollView(from: uiView)
+        }
+    }
+
+    private func configureScrollView(from view: UIView) {
+        var current: UIView? = view
+        while let candidate = current?.superview {
+            if let scrollView = candidate as? UIScrollView {
+                scrollView.alwaysBounceHorizontal = false
+                scrollView.isDirectionalLockEnabled = true
+                return
+            }
+            current = candidate
         }
     }
 }

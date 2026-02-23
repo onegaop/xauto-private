@@ -18,6 +18,8 @@
   <string>2</string>
   <key>LSRequiresIPhoneOS</key>
   <true/>
+  <key>ITSAppUsesNonExemptEncryption</key>
+  <false/>
   <key>NSLocationWhenInUseUsageDescription</key>
   <string>用于获取你当前位置的天气，并生成活动建议。</string>
   <key>CFBundleURLTypes</key>
