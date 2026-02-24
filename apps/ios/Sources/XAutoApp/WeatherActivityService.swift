@@ -33,6 +33,18 @@ enum WeatherActivityService {
     private static let cacheKey = "xauto.weather.latestSnapshot"
 
     static func fetchCurrentWeather() async throws -> WeatherRawSnapshot {
+        if XAutoTestMode.isUIOfflineSmokeEnabled {
+            let snapshot = WeatherRawSnapshot(
+                locationName: "旧金山",
+                symbolName: "cloud.sun.rain.fill",
+                conditionText: "小雨",
+                temperatureC: 13,
+                observationDate: Date(timeIntervalSince1970: 1_772_003_600)
+            )
+            cache(snapshot)
+            return snapshot
+        }
+
         let location = try await DeviceLocationProvider.shared.requestCurrentLocation()
         let weather = try await WeatherService.shared.weather(for: location)
         let current = weather.currentWeather

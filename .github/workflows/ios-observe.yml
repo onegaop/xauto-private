@@ -1,0 +1,56 @@
+name: iOS Observe
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  ios-observe:
+    runs-on: macos-15
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure xcodegen
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+
+      - name: Generate iOS project
+        working-directory: apps/ios
+        run: xcodegen
+
+      - name: Run iOS observe tests (non-blocking)
+        working-directory: apps/ios
+        run: |
+          set -o pipefail
+          RESULT_BUNDLE="$RUNNER_TEMP/XAutoPR.xcresult"
+          if xcrun simctl list devices available | grep -q "iPhone 17 ("; then
+            SIM_DEVICE="iPhone 17"
+          elif xcrun simctl list devices available | grep -q "iPhone 16 ("; then
+            SIM_DEVICE="iPhone 16"
+          else
+            SIM_DEVICE="$(xcrun simctl list devices available | awk -F'[()]' '/iPhone/ { gsub(/^ +| +$/, \"\", $1); print $1; exit }')"
+          fi
+          echo "Using simulator: ${SIM_DEVICE}"
+          xcodebuild \
+            -project XAuto.xcodeproj \
+            -scheme XAutoApp \
+            -testPlan XAutoPR \
+            -destination "platform=iOS Simulator,name=${SIM_DEVICE}" \
+            -resultBundlePath "$RESULT_BUNDLE" \
+            test
+
+      - name: Upload xcresult
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-observe-xcresult
+          path: ${{ runner.temp }}/XAutoPR.xcresult
+          retention-days: 21
+          if-no-files-found: warn

@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { JobRun, JobRunDocument } from '../../database/schemas/job-run.schema';
 import { SyncState, SyncStateDocument } from '../../database/schemas/sync-state.schema';
+import { getEnv } from '../../config/env';
 import { DigestService } from '../digest/digest.service';
 import { SyncService } from '../sync/sync.service';
 import { SyncSettingsService } from '../sync/sync-settings.service';
@@ -11,6 +12,7 @@ import { SyncSettingsService } from '../sync/sync-settings.service';
 export class JobsService {
   private static readonly AUTO_DAILY_DIGEST_STATE_KEY = 'digest:auto_daily:last_trigger_at';
   private static readonly AUTO_DAILY_DIGEST_COOLDOWN_MS = 30 * 60 * 1000;
+  private readonly logger = new Logger(JobsService.name);
 
   constructor(
     @InjectModel(JobRun.name)
@@ -25,6 +27,16 @@ export class JobsService {
   async triggerSync(options?: { force?: boolean; source?: 'internal' | 'admin' }): Promise<Record<string, unknown>> {
     const force = options?.force === true;
     const source = options?.source ?? (force ? 'admin' : 'internal');
+    const env = getEnv();
+
+    if (env.BLOCK_PAID_EXTERNAL_APIS) {
+      this.logger.warn(
+        `Blocked sync trigger source=${source} force=${force} because BLOCK_PAID_EXTERNAL_APIS=true`
+      );
+      throw new ServiceUnavailableException(
+        'Paid external API calls are disabled in test mode (BLOCK_PAID_EXTERNAL_APIS=true)'
+      );
+    }
 
     if (!force) {
       const decision = await this.syncSettingsService.shouldRunNow();

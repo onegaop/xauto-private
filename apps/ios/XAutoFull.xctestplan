@@ -1,0 +1,36 @@
+{
+  "configurations" : [
+    {
+      "id" : "C7ED1B6F-6709-4A10-936A-7A114220A1F3",
+      "name" : "Default",
+      "options" : {
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "environmentVariableEntries" : [
+      {
+        "key" : "XAUTO_TEST_MODE",
+        "value" : "ui_offline_smoke",
+        "isEnabled" : true
+      }
+    ]
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:XAuto.xcodeproj",
+        "identifier" : "227F19B2B168208450D9BF7C",
+        "name" : "XAutoAppTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:XAuto.xcodeproj",
+        "identifier" : "1D74BDF7B92B7CFFA56BF93F",
+        "name" : "XAutoAppUITests"
+      }
+    }
+  ],
+  "version" : 1
+}

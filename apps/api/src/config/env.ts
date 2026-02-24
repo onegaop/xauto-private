@@ -45,6 +45,24 @@ const loadLocalEnvFile = (): void => {
 
 loadLocalEnvFile();
 
+const booleanFlagSchema = z.preprocess((value) => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+      return true;
+    }
+    if (['0', 'false', 'no', 'off', ''].includes(normalized)) {
+      return false;
+    }
+  }
+
+  return value;
+}, z.boolean().default(false));
+
 const envSchema = z.object({
   PORT: z.string().default('8080').transform((value) => Number(value)),
   MONGODB_URI: z.string().min(1),
@@ -65,7 +83,8 @@ const envSchema = z.object({
   X_OAUTH_TOKEN_URL: z.string().url().default('https://api.x.com/2/oauth2/token'),
   X_API_BASE_URL: z.string().url().default('https://api.x.com/2'),
 
-  BUDGET_CNY_MONTHLY: z.string().default('100').transform((value) => Number(value))
+  BUDGET_CNY_MONTHLY: z.string().default('100').transform((value) => Number(value)),
+  BLOCK_PAID_EXTERNAL_APIS: booleanFlagSchema
 });
 
 export type Env = z.infer<typeof envSchema> & { adminAllowedEmails: string[] };

@@ -81,6 +81,7 @@ export class SyncService {
     let detailFetched = 0;
     let pagesFetched = 0;
     let stoppedOnFirstNoNewPage = false;
+    let stoppedOnFirstExistingPage = false;
     let existingCountOnLastPage = 0;
 
     while (page < 5) {
@@ -104,15 +105,12 @@ export class SyncService {
         .select('tweetId')
         .lean();
       const existingIds = new Set(existing.map((item) => item.tweetId));
+      const hasExistingInPage = existingIds.size > 0;
       existingCountOnLastPage = existingIds.size;
       const newItems = items.filter((item) => !existingIds.has(item.tweetId));
       totalInserted += newItems.length;
-
-      // Bookmark pages are sorted by recent bookmark time. Once a page has no new IDs,
-      // older pages are very unlikely to contain new records for our incremental sync.
       if (newItems.length === 0) {
         stoppedOnFirstNoNewPage = true;
-        break;
       }
 
       let detailsById = new Map<string, XTweetDetailItem>();
@@ -165,6 +163,13 @@ export class SyncService {
         await this.upsertSummary(item.tweetId, summary);
       }
 
+      // Bookmark pages are sorted by recent bookmark time. Once a page contains
+      // existing IDs, older pages are very unlikely to have new records.
+      if (hasExistingInPage) {
+        stoppedOnFirstExistingPage = true;
+        break;
+      }
+
       if (!nextToken) {
         break;
       }
@@ -179,6 +184,7 @@ export class SyncService {
       detailRequested,
       detailFetched,
       stoppedOnFirstNoNewPage,
+      stoppedOnFirstExistingPage,
       existingCountOnLastPage
     };
   }

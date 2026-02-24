@@ -314,6 +314,16 @@ export class MobileService {
     const context = this.normalizeContext(dto.context);
     const sourceLangHint = this.normalizeLangHint(dto.sourceLangHint);
     const targetLang = this.normalizeTargetLang(dto.targetLang);
+    const env = getEnv();
+
+    if (env.BLOCK_PAID_EXTERNAL_APIS) {
+      this.logger.warn(
+        `Blocked vocabulary lookup term="${term}" sourceLangHint="${sourceLangHint}" targetLang="${targetLang}" because BLOCK_PAID_EXTERNAL_APIS=true`
+      );
+      throw new ServiceUnavailableException(
+        'Vocabulary lookup is disabled in test mode (BLOCK_PAID_EXTERNAL_APIS=true)'
+      );
+    }
 
     try {
       const result = await this.aiService.lookupVocabularyCard({

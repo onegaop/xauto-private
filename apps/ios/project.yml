@@ -20,6 +20,12 @@ schemes:
       targets:
         XAutoApp: all
         XAutoWidget: [build]
+    test:
+      config: Debug
+      testPlans:
+        - path: XAutoPR.xctestplan
+          defaultPlan: true
+        - path: XAutoFull.xctestplan
     run:
       config: Debug
     archive:
@@ -61,5 +67,34 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.xauto.ai.widget
         INFOPLIST_FILE: Sources/XAutoWidget/Info.plist
         CODE_SIGN_ENTITLEMENTS: Sources/XAutoWidget/XAutoWidget.entitlements
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: NKTXY2K9WD
+
+  XAutoAppTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Sources/XAutoAppTests
+    dependencies:
+      - target: XAutoApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xauto.ai.tests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: NKTXY2K9WD
+
+  XAutoAppUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - Sources/XAutoAppUITests
+    dependencies:
+      - target: XAutoApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xauto.ai.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: XAutoApp
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: NKTXY2K9WD

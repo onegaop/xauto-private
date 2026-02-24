@@ -8,6 +8,26 @@ enum XAutoSharedKeys {
     static let widgetDigest = "xauto_widget_digest"
     static let widgetKind = "XAutoWidget"
     static let defaultAPIBase = "https://xauto-api-516721184000.asia-east1.run.app"
+    static let offlineTestAPIBase = "https://offline.test.local"
+    static let offlineTestPAT = "pat_ui_offline_smoke"
+}
+
+enum XAutoTestMode: String {
+    case uiOfflineSmoke = "ui_offline_smoke"
+
+    static let environmentKey = "XAUTO_TEST_MODE"
+
+    static var current: XAutoTestMode? {
+        guard let raw = ProcessInfo.processInfo.environment[environmentKey]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty else {
+            return nil
+        }
+        return XAutoTestMode(rawValue: raw)
+    }
+
+    static var isUIOfflineSmokeEnabled: Bool {
+        current == .uiOfflineSmoke
+    }
 }
 
 enum SharedDefaults {

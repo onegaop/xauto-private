@@ -43,7 +43,7 @@ export class XApiService {
     const params: Record<string, string> = {
       // Use bookmark list for ID-level incremental detection only.
       'tweet.fields': 'created_at,author_id',
-      max_results: String(options.maxResults ?? 100)
+      max_results: String(options.maxResults ?? 10)
     };
 
     if (options.paginationToken) {

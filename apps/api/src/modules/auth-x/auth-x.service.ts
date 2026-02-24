@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import axios from 'axios';
 import { createHash, randomBytes } from 'crypto';
@@ -16,6 +16,8 @@ type XTokenResponse = {
 
 @Injectable()
 export class AuthXService {
+  private readonly logger = new Logger(AuthXService.name);
+
   constructor(
     @InjectModel(SyncState.name)
     private readonly syncStateModel: Model<SyncStateDocument>
@@ -23,6 +25,7 @@ export class AuthXService {
 
   async startOAuth(): Promise<{ authorizeUrl: string; state: string }> {
     const env = getEnv();
+    this.ensurePaidExternalApisEnabled('startOAuth', env);
 
     if (!env.X_CLIENT_ID || !env.X_REDIRECT_URI) {
       throw new UnauthorizedException('X OAuth env is not configured');
@@ -63,6 +66,7 @@ export class AuthXService {
 
   async handleCallback(code: string, state: string): Promise<{ connected: boolean }> {
     const env = getEnv();
+    this.ensurePaidExternalApisEnabled('handleCallback', env);
 
     if (!env.X_CLIENT_ID || !env.X_REDIRECT_URI) {
       throw new UnauthorizedException('X OAuth env is not configured');
@@ -129,6 +133,7 @@ export class AuthXService {
 
   async refreshAccessToken(currentRefreshToken: string): Promise<{ accessToken: string; refreshToken?: string; expiresAt?: string }> {
     const env = getEnv();
+    this.ensurePaidExternalApisEnabled('refreshAccessToken', env);
 
     if (!env.X_CLIENT_ID) {
       throw new UnauthorizedException('X OAuth env is not configured');
@@ -163,5 +168,16 @@ export class AuthXService {
     };
 
     return next;
+  }
+
+  private ensurePaidExternalApisEnabled(action: string, env: ReturnType<typeof getEnv>): void {
+    if (!env.BLOCK_PAID_EXTERNAL_APIS) {
+      return;
+    }
+
+    this.logger.warn(`Blocked AuthXService.${action} because BLOCK_PAID_EXTERNAL_APIS=true`);
+    throw new ServiceUnavailableException(
+      'X OAuth endpoints are disabled in test mode (BLOCK_PAID_EXTERNAL_APIS=true)'
+    );
   }
 }

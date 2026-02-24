@@ -1,53 +1,55 @@
 # XAuto
 
-XAuto is a personal X bookmarks external-brain system.
+XAuto 是一个个人 X 书签外脑系统。
 
-## Monorepo layout
+## Monorepo 结构
 
-- `apps/api`: NestJS + Fastify backend.
-- `apps/admin`: Next.js admin panel with Google login.
-- `apps/ios`: SwiftUI + WidgetKit skeleton.
-- `packages/shared-types`: shared contracts.
-- `infra/cloud-run`: deployment and scheduler scripts.
+- `apps/api`：NestJS + Fastify 后端服务
+- `apps/admin`：Next.js 管理后台（Google 登录）
+- `apps/ios`：SwiftUI + WidgetKit 客户端
+- `packages/shared-types`：共享类型与契约
+- `infra/cloud-run`：部署与调度脚本
 
-## Core capabilities in this V1 scaffold
+## 当前核心能力
 
-- X OAuth PKCE endpoints.
-- Internal sync/digest jobs.
-- MongoDB collections and indexes.
-- PAT-based mobile read APIs.
-- Provider config management with encrypted API keys.
-- Budget gate (70% degrade, 100% block digest model).
-- CI/CD workflows for GitHub private repo -> Cloud Run.
+- X OAuth PKCE 接入
+- 内部 sync/digest 任务链路
+- MongoDB 集合与索引
+- 基于 PAT 的移动端读取 API
+- Provider 配置与 API Key 加密存储
+- 预算闸门（70% 降级，100% 阻断 digest 模型）
+- GitHub 私有仓库到 Cloud Run 的 CI/CD 工作流
+- iOS 离线测试计划（`XAutoPR` / `XAutoFull`）与非阻断 `ios-observe` 观察轨
 
-## Quick start
+## 快速开始
 
-1. Install Node.js 20+ and npm 10+.
-2. Fill local secrets in `secrets.local.json`.
-3. Create app env files from `apps/api/.env.example` and `apps/admin/.env.example`.
-4. Install dependencies:
+1. 安装 Node.js 20+ 与 npm 10+。
+2. 在 `secrets.local.json` 中填写本地密钥。
+3. 基于 `apps/api/.env.example` 与 `apps/admin/.env.example` 创建环境变量文件。
+4. 安装依赖：
 
 ```bash
 npm install
 ```
 
-5. Run backend and admin:
+5. 启动 API 与 Admin：
 
 ```bash
 npm run dev:api
 npm run dev:admin
 ```
 
-## Git rules
+## Git 规则
 
-- Do not commit on `master`.
-- Use feature branches: `codex/<feature-name>`.
-- Remove added `console.log` before commit.
-- Push every local commit to remote branch.
+- 不要在 `master` 上提交
+- 使用功能分支：`codex/<feature-name>`
+- 提交前移除新增的 `console.log`
+- 本地有提交就必须推送到远端
 
-## Additional docs
+## 文档索引
 
-- API contract: `docs/api-contract.md`
-- GitHub private setup: `docs/github-private-setup.md`
-- Runbook: `docs/runbook.md`
-- Updated plan: `docs/implementation-plan-v2.md`
+- API 契约：`docs/api-contract.md`
+- GitHub 私有仓库配置：`docs/github-private-setup.md`
+- 运行手册：`docs/runbook.md`
+- V2 计划：`docs/implementation-plan-v2.md`
+- 业务全景图：`docs/business-map-v2.md`

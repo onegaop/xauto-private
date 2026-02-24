@@ -6,7 +6,10 @@ struct XAutoApp: App {
 
     init() {
         let defaults = SharedDefaults.userDefaults
-        if defaults.string(forKey: XAutoSharedKeys.apiBase) == nil {
+        if XAutoTestMode.isUIOfflineSmokeEnabled {
+            defaults.set(XAutoSharedKeys.offlineTestAPIBase, forKey: XAutoSharedKeys.apiBase)
+            defaults.set(XAutoSharedKeys.offlineTestPAT, forKey: XAutoSharedKeys.pat)
+        } else if defaults.string(forKey: XAutoSharedKeys.apiBase) == nil {
             defaults.set(XAutoSharedKeys.defaultAPIBase, forKey: XAutoSharedKeys.apiBase)
         }
         if defaults.object(forKey: XAutoSharedKeys.localFunAIEnabled) == nil {

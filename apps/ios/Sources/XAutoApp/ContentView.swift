@@ -141,16 +141,19 @@ struct ContentView: View {
     var body: some View {
         TabView(selection: $navigation.selectedTab) {
             TodayView()
-                .tabItem { Label("Today", systemImage: "sun.max.fill") }
+                .tabItem { Label("Today", systemImage: "sun.max.fill").accessibilityIdentifier("tab.today") }
                 .tag(AppTab.today)
+                .accessibilityIdentifier("tab.today")
 
             WeekView()
-                .tabItem { Label("Week", systemImage: "calendar") }
+                .tabItem { Label("Week", systemImage: "calendar").accessibilityIdentifier("tab.week") }
                 .tag(AppTab.week)
+                .accessibilityIdentifier("tab.week")
 
             SettingsView()
-                .tabItem { Label("Settings", systemImage: "gearshape.fill") }
+                .tabItem { Label("Settings", systemImage: "gearshape.fill").accessibilityIdentifier("tab.settings") }
                 .tag(AppTab.settings)
+                .accessibilityIdentifier("tab.settings")
         }
         .tint(.orange)
     }
@@ -2195,15 +2198,18 @@ struct SettingsView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
                         .keyboardType(.URL)
+                        .accessibilityIdentifier("settings.api_base")
 
                     if revealToken {
                         TextField("PAT", text: $pat)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled(true)
+                            .accessibilityIdentifier("settings.pat")
                     } else {
                         SecureField("PAT", text: $pat)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled(true)
+                            .accessibilityIdentifier("settings.pat")
                     }
 
                     Toggle("Show PAT", isOn: $revealToken)
@@ -2238,6 +2244,7 @@ struct SettingsView: View {
                             Label("Save & Test", systemImage: "network")
                         }
                     }
+                    .accessibilityIdentifier("settings.save_test")
 
                     if let result = viewModel.testResult {
                         Text(result)
@@ -2249,6 +2256,7 @@ struct SettingsView: View {
                         Link(destination: url) {
                             Label("Open Admin Dashboard", systemImage: "arrow.up.right.square")
                         }
+                        .accessibilityIdentifier("settings.open_admin")
                     }
                 }
             }
