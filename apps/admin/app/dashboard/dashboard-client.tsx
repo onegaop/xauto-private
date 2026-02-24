@@ -551,7 +551,7 @@ export default function DashboardClient(): JSX.Element {
               </Collapse.Panel>
             </Collapse>
 
-            <Divider orientation="left">最近任务运行状态</Divider>
+            <Divider titlePlacement="left">最近任务运行状态</Divider>
             <Table 
               dataSource={jobs} 
               columns={jobColumns} 
@@ -625,13 +625,13 @@ export default function DashboardClient(): JSX.Element {
                 </div>
               </Form>
 
-              <Divider orientation="left">当前 Providers</Divider>
+              <Divider titlePlacement="left">当前 Providers</Divider>
               <div style={{ maxHeight: 200, overflowY: 'auto' }}>
                 {providers.map(p => (
                   <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
                     <Space>
                       <Tag color="cyan">{p.provider}</Tag>
-                      <Text type="secondary" size="small">mini: {p.miniModel}</Text>
+                      <Text type="secondary" style={{ fontSize: 12 }}>mini: {p.miniModel}</Text>
                     </Space>
                     <Badge status={p.hasApiKey ? 'success' : 'warning'} text={p.hasApiKey ? 'API Key OK' : 'Key 缺失'} />
                   </div>
@@ -666,7 +666,7 @@ export default function DashboardClient(): JSX.Element {
                 {pat && (
                   <div style={{ marginTop: 16, padding: 12, background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 4 }}>
                     <Text strong copyable>{pat}</Text>
-                    <div style={{ marginTop: 4 }}><Text type="warning" size="small">请妥善保存，创建后无法再次查看</Text></div>
+                    <div style={{ marginTop: 4 }}><Text type="warning" style={{ fontSize: 12 }}>请妥善保存，创建后无法再次查看</Text></div>
                   </div>
                 )}
               </Card>
