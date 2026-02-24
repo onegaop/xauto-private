@@ -349,19 +349,15 @@ extension RichPostTextView {
             self.onVocabularyTap = onVocabularyTap
         }
 
-        func textView(
-            _ textView: UITextView,
-            shouldInteractWith url: URL,
-            in characterRange: NSRange,
-            interaction: UITextItemInteraction
-        ) -> Bool {
-            handle(url)
-            return false
-        }
-
-        func textView(_ textView: UITextView, shouldInteractWith url: URL, in characterRange: NSRange) -> Bool {
-            handle(url)
-            return false
+        func textView(_ textView: UITextView, primaryActionFor textItem: UITextItem, defaultAction: UIAction) -> UIAction? {
+            switch textItem.content {
+            case .link(let url):
+                return UIAction { [weak self] _ in
+                    self?.handle(url)
+                }
+            default:
+                return defaultAction
+            }
         }
 
         private func handle(_ url: URL) {
