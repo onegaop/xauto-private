@@ -7,7 +7,6 @@ struct InAppSafariView: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> SFSafariViewController {
         let controller = SFSafariViewController(url: url)
-        controller.preferredControlTintColor = UIColor.systemOrange
         controller.dismissButtonStyle = .close
         return controller
     }

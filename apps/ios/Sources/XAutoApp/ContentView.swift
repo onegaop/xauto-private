@@ -3365,7 +3365,10 @@ private struct FlowWrapLayout: Layout {
     var rowSpacing: CGFloat = 8
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let fallbackWidth = max(240, UIScreen.main.bounds.width - 32)
+        let intrinsicWidth = subviews.reduce(CGFloat.zero) { current, subview in
+            max(current, subview.sizeThatFits(.unspecified).width)
+        }
+        let fallbackWidth = max(240, intrinsicWidth)
         let maxWidth = max(1, proposal.width ?? fallbackWidth)
         var currentX: CGFloat = 0
         var currentRowHeight: CGFloat = 0

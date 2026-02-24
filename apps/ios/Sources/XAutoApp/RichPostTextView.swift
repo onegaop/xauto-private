@@ -58,7 +58,7 @@ struct RichPostTextView: UIViewRepresentable {
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
-        let fallbackWidth = UIScreen.main.bounds.width - 40
+        let fallbackWidth = uiView.bounds.width > 0 ? uiView.bounds.width : 320
         let width = max(0, proposal.width ?? fallbackWidth)
         guard width > 0 else {
             return nil

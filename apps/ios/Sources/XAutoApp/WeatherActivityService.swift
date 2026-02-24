@@ -1,5 +1,6 @@
 import CoreLocation
 import Foundation
+import MapKit
 import WeatherKit
 
 struct WeatherRawSnapshot {
@@ -130,19 +131,26 @@ enum WeatherActivityService {
     }
 
     private static func resolveLocationName(for location: CLLocation) async -> String {
-        let geocoder = CLGeocoder()
         do {
-            let placemarks = try await geocoder.reverseGeocodeLocation(location)
-            if let place = placemarks.first {
-                if let city = place.locality, !city.isEmpty {
-                    return city
-                }
-                if let area = place.subAdministrativeArea, !area.isEmpty {
-                    return area
-                }
-                if let state = place.administrativeArea, !state.isEmpty {
-                    return state
-                }
+            guard let request = MKReverseGeocodingRequest(location: location) else {
+                return "当前位置"
+            }
+            let mapItems = try await request.mapItems
+            guard let mapItem = mapItems.first else {
+                return "当前位置"
+            }
+
+            if let city = mapItem.addressRepresentations?.cityName, !city.isEmpty {
+                return city
+            }
+            if let cityWithContext = mapItem.addressRepresentations?.cityWithContext(.short), !cityWithContext.isEmpty {
+                return cityWithContext
+            }
+            if let shortAddress = mapItem.address?.shortAddress, !shortAddress.isEmpty {
+                return shortAddress
+            }
+            if let fullAddress = mapItem.address?.fullAddress, !fullAddress.isEmpty {
+                return fullAddress
             }
         } catch {}
 
