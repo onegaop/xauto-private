@@ -1,6 +1,9 @@
 import SwiftUI
 import MarkdownUI
 import UIKit
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
 
 // MARK: - Refresh Control
 
@@ -794,7 +797,9 @@ struct ItemDetailView: View {
     }
 
     var body: some View {
-        let vocabularyPlan = DetailVocabularyPlanner.build(item: viewModel.item, localInsight: viewModel.localInsight)
+        let vocabularyPlan = viewModel.vocabularyPlan.isEmpty
+            ? DetailVocabularyPlanner.build(item: viewModel.item, localInsight: viewModel.localInsight)
+            : viewModel.vocabularyPlan
         let highlightedWordCount = vocabularyPlan.values.reduce(0) { partial, terms in
             partial + terms.count
         }
@@ -832,7 +837,9 @@ struct ItemDetailView: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                         if highlightedWordCount > 0 {
-                            Text("高亮词可点击查词；链接仍保持原跳转。同词在本页只高亮一次。")
+                            Text(viewModel.isGeneratingVocabularyPlan
+                                 ? "端侧模型正在优化高亮词，结果将自动刷新。"
+                                 : "高亮词可点击查词；链接仍保持原跳转。同词在本页只高亮一次。")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -1197,6 +1204,9 @@ struct ItemDetailView: View {
         .scrollBounceBehavior(.basedOnSize, axes: .vertical)
         .background(AppBackground())
         .navigationTitle("Detail")
+        .task {
+            await viewModel.refreshVocabularyPlan()
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -1525,7 +1535,7 @@ struct ItemDetailView: View {
 
 }
 
-private enum DetailVocabularyPlanner {
+enum DetailVocabularyPlanner {
     private static let maxTermsPerBlock = 3
     private static let maxTermsTotal = 36
 
@@ -1537,9 +1547,62 @@ private enum DetailVocabularyPlanner {
         "post", "tweet", "thread", "summary", "insight"
     ]
 
+    private static let curatedPhrases: [String] = [
+        "large language model",
+        "large language models",
+        "language model",
+        "language models",
+        "retrieval augmented generation",
+        "mixture of experts",
+        "chain of thought",
+        "prompt engineering",
+        "in context learning",
+        "vector database",
+        "foundation model",
+        "fine tuning",
+        "reinforcement learning",
+        "supervised fine tuning",
+        "agent workflow",
+        "model distillation",
+        "knowledge graph",
+        "attention mechanism"
+    ]
+
+    private static let boostedTerms: Set<String> = [
+        "ai", "ml", "llm", "vlm", "rag", "sft", "rlhf", "moe", "cot", "mcp",
+        "agent", "agents", "token", "tokens", "embedding", "embeddings",
+        "inference", "throughput", "latency", "quantization", "distillation",
+        "retrieval", "vector", "prompt", "prompts", "finetune", "finetuning",
+        "benchmark", "benchmarks", "eval", "evaluation", "transformer",
+        "transformers", "attention"
+    ]
+
+    private struct Candidate {
+        let term: String
+        let normalized: String
+        let location: Int
+        let score: Int
+        let isPhrase: Bool
+    }
+
     private struct Block {
         let key: String
         let text: String
+    }
+
+    static func buildPreferred(item: BookmarkItemResponse, localInsight: LocalFunInsight?) async -> [String: [String]] {
+        let fallback = build(item: item, localInsight: localInsight)
+
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *) {
+            let blocks = buildBlocks(item: item, localInsight: localInsight)
+            if let modelPlan = await buildWithFoundationModels(blocks: blocks), !modelPlan.isEmpty {
+                return mergeModelPlan(modelPlan, fallbackPlan: fallback, blocks: blocks)
+            }
+        }
+        #endif
+
+        return fallback
     }
 
     static func build(item: BookmarkItemResponse, localInsight: LocalFunInsight?) -> [String: [String]] {
@@ -1551,17 +1614,32 @@ private enum DetailVocabularyPlanner {
 
         for block in blocks {
             var blockTerms: [String] = []
-            let candidates = orderedCandidates(from: block.text)
+            let candidates = rankedCandidates(from: block.text)
+            var phrasePicked = false
+            var wordCount = 0
 
             for candidate in candidates {
-                let normalized = normalizedKey(candidate)
-                if normalized.isEmpty || globalSeen.contains(normalized) {
+                if candidate.normalized.isEmpty || globalSeen.contains(candidate.normalized) {
                     continue
                 }
 
-                globalSeen.insert(normalized)
-                blockTerms.append(candidate)
+                if candidate.isPhrase {
+                    if phrasePicked {
+                        continue
+                    }
+                } else if phrasePicked && wordCount >= 2 {
+                    continue
+                }
+
+                globalSeen.insert(candidate.normalized)
+                blockTerms.append(candidate.term)
                 totalCount += 1
+
+                if candidate.isPhrase {
+                    phrasePicked = true
+                } else {
+                    wordCount += 1
+                }
 
                 if blockTerms.count >= maxTermsPerBlock || totalCount >= maxTermsTotal {
                     break
@@ -1579,6 +1657,173 @@ private enum DetailVocabularyPlanner {
 
         return result
     }
+
+    private static func mergeModelPlan(
+        _ modelPlan: [String: [String]],
+        fallbackPlan: [String: [String]],
+        blocks: [Block]
+    ) -> [String: [String]] {
+        var result: [String: [String]] = [:]
+        var globalSeen = Set<String>()
+        var totalCount = 0
+
+        for block in blocks {
+            var terms: [String] = []
+            let modelTerms = modelPlan[block.key] ?? []
+            let fallbackTerms = fallbackPlan[block.key] ?? []
+            let candidates = modelTerms + fallbackTerms
+
+            for term in candidates {
+                if terms.count >= maxTermsPerBlock || totalCount >= maxTermsTotal {
+                    break
+                }
+
+                let normalized = normalizedKey(term)
+                if normalized.isEmpty || globalSeen.contains(normalized) {
+                    continue
+                }
+                guard !ranges(of: term, in: block.text).isEmpty else {
+                    continue
+                }
+
+                globalSeen.insert(normalized)
+                terms.append(term)
+                totalCount += 1
+            }
+
+            if !terms.isEmpty {
+                result[block.key] = terms
+            }
+
+            if totalCount >= maxTermsTotal {
+                break
+            }
+        }
+
+        return result
+    }
+
+    #if canImport(FoundationModels)
+    @available(iOS 26.0, *)
+    private static func buildWithFoundationModels(blocks: [Block]) async -> [String: [String]]? {
+        guard !blocks.isEmpty else {
+            return nil
+        }
+
+        do {
+            let session = LanguageModelSession(
+                instructions: """
+                You select glossary-worthy technical terms for text highlighting in a mobile reader.
+                Return STRICT JSON only, no markdown, no explanation.
+                JSON shape:
+                {
+                  "<block_key>": ["term1", "term2", "term3"]
+                }
+                Rules:
+                - keys must come from provided block keys only.
+                - each value is an array of 0-3 English terms/phrases (1-3 words).
+                - prioritize domain terms and named technical concepts.
+                - avoid generic words, pronouns, and filler terms.
+                - keep terms exactly as they appear in the text when possible.
+                """
+            )
+
+            let payload = serializedBlockPayload(blocks)
+            let response = try await session.respond(
+                to: """
+                Select highlight terms for these blocks:
+                \(payload)
+                """
+            )
+
+            let raw = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            return parseFoundationModelsPlan(raw, blocks: blocks)
+        } catch {
+            return nil
+        }
+    }
+
+    private static func serializedBlockPayload(_ blocks: [Block]) -> String {
+        let items: [[String: String]] = blocks.map { block in
+            let compact = block.text
+                .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let clipped = String(compact.prefix(600))
+            return ["key": block.key, "text": clipped]
+        }
+
+        guard JSONSerialization.isValidJSONObject(items),
+              let data = try? JSONSerialization.data(withJSONObject: items, options: [.sortedKeys]),
+              let output = String(data: data, encoding: .utf8) else {
+            return "[]"
+        }
+        return output
+    }
+
+    private static func parseFoundationModelsPlan(_ raw: String, blocks: [Block]) -> [String: [String]] {
+        let jsonCandidate = extractJSONObjectText(from: raw)
+        guard let data = jsonCandidate.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data),
+              let object = json as? [String: Any] else {
+            return [:]
+        }
+
+        let blockByKey = Dictionary(uniqueKeysWithValues: blocks.map { ($0.key, $0) })
+        var result: [String: [String]] = [:]
+        var globalSeen = Set<String>()
+        var totalCount = 0
+
+        for block in blocks {
+            guard let values = object[block.key] as? [Any] else {
+                continue
+            }
+
+            var terms: [String] = []
+            for value in values {
+                if terms.count >= maxTermsPerBlock || totalCount >= maxTermsTotal {
+                    break
+                }
+
+                guard let rawTerm = value as? String else {
+                    continue
+                }
+                let term = rawTerm.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !term.isEmpty,
+                      term.count <= 60,
+                      isEnglishLike(term) else {
+                    continue
+                }
+
+                guard let sourceBlock = blockByKey[block.key],
+                      !ranges(of: term, in: sourceBlock.text).isEmpty else {
+                    continue
+                }
+
+                let normalized = normalizedKey(term)
+                guard !normalized.isEmpty, !globalSeen.contains(normalized) else {
+                    continue
+                }
+
+                globalSeen.insert(normalized)
+                terms.append(term)
+                totalCount += 1
+            }
+
+            if !terms.isEmpty {
+                result[block.key] = terms
+            }
+        }
+
+        return result
+    }
+
+    private static func extractJSONObjectText(from raw: String) -> String {
+        if let start = raw.firstIndex(of: "{"), let end = raw.lastIndex(of: "}") {
+            return String(raw[start...end])
+        }
+        return raw
+    }
+    #endif
 
     private static func buildBlocks(item: BookmarkItemResponse, localInsight: LocalFunInsight?) -> [Block] {
         var blocks: [Block] = []
@@ -1661,37 +1906,107 @@ private enum DetailVocabularyPlanner {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func orderedCandidates(from text: String) -> [String] {
+    private static func rankedCandidates(from text: String) -> [Candidate] {
         let nsText = text as NSString
         let fullRange = NSRange(location: 0, length: nsText.length)
         guard fullRange.length > 0 else {
             return []
         }
 
-        var matches: [(location: Int, term: String)] = []
+        var candidatesByNormalized: [String: Candidate] = [:]
 
-        if let englishRegex = try? NSRegularExpression(pattern: "(?<![A-Za-z0-9_])[A-Za-z][A-Za-z+'-]{3,}(?![A-Za-z0-9_])") {
-            for match in englishRegex.matches(in: text, options: [], range: fullRange) {
-                let word = nsText.substring(with: match.range)
-                if isValidEnglish(word) {
-                    matches.append((match.range.location, word))
-                }
-            }
-        }
-
-        matches.sort { $0.location < $1.location }
-
-        var output: [String] = []
-        var seenInBlock = Set<String>()
-        for (_, term) in matches {
-            let normalized = normalizedKey(term)
-            guard !normalized.isEmpty, !seenInBlock.contains(normalized) else {
+        // Curated phrases are highest-priority anchors for technical concepts.
+        for phrase in curatedPhrases {
+            let ranges = ranges(of: phrase, in: text)
+            guard let first = ranges.first else {
                 continue
             }
-            seenInBlock.insert(normalized)
-            output.append(term)
+
+            let normalized = normalizedKey(phrase)
+            guard !normalized.isEmpty else {
+                continue
+            }
+
+            let score = 320 + (min(ranges.count, 3) * 16) + earlyPositionBonus(for: first.location)
+            mergeCandidate(
+                Candidate(
+                    term: nsText.substring(with: first),
+                    normalized: normalized,
+                    location: first.location,
+                    score: score,
+                    isPhrase: true
+                ),
+                into: &candidatesByNormalized
+            )
         }
-        return output
+
+        if let phraseRegex = try? NSRegularExpression(
+            pattern: "(?<![A-Za-z0-9_])[A-Za-z][A-Za-z+'-]{2,}(?:\\s+[A-Za-z][A-Za-z+'-]{2,}){1,2}(?![A-Za-z0-9_])"
+        ) {
+            for match in phraseRegex.matches(in: text, options: [], range: fullRange) {
+                let phrase = nsText.substring(with: match.range)
+                guard isValidPhrase(phrase) else {
+                    continue
+                }
+                let normalized = normalizedKey(phrase)
+                guard !normalized.isEmpty else {
+                    continue
+                }
+
+                let score = 220
+                    + boostedTermBonus(for: normalized)
+                    + (min(ranges(of: phrase, in: text).count, 3) * 10)
+                    + earlyPositionBonus(for: match.range.location)
+
+                mergeCandidate(
+                    Candidate(
+                        term: phrase,
+                        normalized: normalized,
+                        location: match.range.location,
+                        score: score,
+                        isPhrase: true
+                    ),
+                    into: &candidatesByNormalized
+                )
+            }
+        }
+
+        if let englishRegex = try? NSRegularExpression(pattern: "(?<![A-Za-z0-9_])[A-Za-z][A-Za-z+'-]{2,}(?![A-Za-z0-9_])") {
+            for match in englishRegex.matches(in: text, options: [], range: fullRange) {
+                let word = nsText.substring(with: match.range)
+                if !isValidEnglish(word) && !isBoostedShortTerm(word) {
+                    continue
+                }
+
+                let normalized = normalizedKey(word)
+                guard !normalized.isEmpty else {
+                    continue
+                }
+
+                let score = 140
+                    + boostedTermBonus(for: normalized)
+                    + (min(ranges(of: word, in: text).count, 4) * 8)
+                    + earlyPositionBonus(for: match.range.location)
+
+                mergeCandidate(
+                    Candidate(
+                        term: word,
+                        normalized: normalized,
+                        location: match.range.location,
+                        score: score,
+                        isPhrase: false
+                    ),
+                    into: &candidatesByNormalized
+                )
+            }
+        }
+
+        return candidatesByNormalized.values.sorted { lhs, rhs in
+            if lhs.score != rhs.score {
+                return lhs.score > rhs.score
+            }
+            return lhs.location < rhs.location
+        }
     }
 
     private static func isValidEnglish(_ raw: String) -> Bool {
@@ -1710,6 +2025,93 @@ private enum DetailVocabularyPlanner {
             return false
         }
         return true
+    }
+
+    private static func isEnglishLike(_ value: String) -> Bool {
+        value.range(of: "[A-Za-z]", options: .regularExpression) != nil
+    }
+
+    private static func isValidPhrase(_ raw: String) -> Bool {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 8, trimmed.count <= 60 else {
+            return false
+        }
+
+        let tokens = trimmed
+            .split(whereSeparator: \.isWhitespace)
+            .map(String.init)
+        guard tokens.count >= 2, tokens.count <= 3 else {
+            return false
+        }
+
+        if !tokens.contains(where: { boostedTerms.contains(normalizedKey($0)) }) {
+            return false
+        }
+
+        if let first = tokens.first, englishStopwords.contains(normalizedKey(first)) {
+            return false
+        }
+        if let last = tokens.last, englishStopwords.contains(normalizedKey(last)) {
+            return false
+        }
+
+        return true
+    }
+
+    private static func isBoostedShortTerm(_ raw: String) -> Bool {
+        let normalized = normalizedKey(raw)
+        guard normalized.count >= 2 else {
+            return false
+        }
+        return boostedTerms.contains(normalized)
+    }
+
+    private static func boostedTermBonus(for normalizedTerm: String) -> Int {
+        let term = normalizedTerm.lowercased()
+        let tokens = term
+            .split(whereSeparator: { $0 == " " || $0 == "-" })
+            .map(String.init)
+
+        var bonus = 0
+        for token in tokens where boostedTerms.contains(token) {
+            bonus += 22
+        }
+        return bonus
+    }
+
+    private static func earlyPositionBonus(for location: Int) -> Int {
+        max(0, 18 - (location / 120))
+    }
+
+    private static func mergeCandidate(_ candidate: Candidate, into map: inout [String: Candidate]) {
+        guard let existing = map[candidate.normalized] else {
+            map[candidate.normalized] = candidate
+            return
+        }
+
+        if candidate.score > existing.score {
+            map[candidate.normalized] = candidate
+            return
+        }
+
+        if candidate.score == existing.score && candidate.location < existing.location {
+            map[candidate.normalized] = candidate
+        }
+    }
+
+    private static func ranges(of term: String, in text: String) -> [NSRange] {
+        let nsText = text as NSString
+        let fullRange = NSRange(location: 0, length: nsText.length)
+        guard fullRange.length > 0 else {
+            return []
+        }
+
+        let escaped = NSRegularExpression.escapedPattern(for: term)
+        let pattern = "(?<![A-Za-z0-9_])\(escaped)(?![A-Za-z0-9_])"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+            return []
+        }
+        return regex.matches(in: text, options: [], range: fullRange).map(\.range)
     }
 
     private static func normalizedKey(_ raw: String) -> String {

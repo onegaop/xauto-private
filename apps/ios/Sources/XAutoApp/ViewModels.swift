@@ -324,12 +324,15 @@ final class ItemDetailViewModel: ObservableObject {
     @Published var item: BookmarkItemResponse
     @Published var isRefreshing = false
     @Published var isGeneratingLocalInsight = false
+    @Published var isGeneratingVocabularyPlan = false
     @Published var errorMessage: String?
     @Published var localInsight: LocalFunInsight?
     @Published var localInsightMode: LocalFunInsightMode = .actionPlan
+    @Published var vocabularyPlan: [String: [String]]
 
     init(seed: BookmarkItemResponse) {
         self.item = seed
+        self.vocabularyPlan = DetailVocabularyPlanner.build(item: seed, localInsight: nil)
     }
 
     func refresh() async {
@@ -339,6 +342,7 @@ final class ItemDetailViewModel: ObservableObject {
 
         do {
             item = try await APIClient.shared.fetchItem(tweetId: item.tweetId)
+            await refreshVocabularyPlan()
         } catch is CancellationError {
             return
         } catch let urlError as URLError where urlError.code == .cancelled {
@@ -364,6 +368,13 @@ final class ItemDetailViewModel: ObservableObject {
         isGeneratingLocalInsight = true
         defer { isGeneratingLocalInsight = false }
         localInsight = await LocalFunInsightService.generate(from: item, mode: localInsightMode)
+        await refreshVocabularyPlan()
+    }
+
+    func refreshVocabularyPlan() async {
+        isGeneratingVocabularyPlan = true
+        defer { isGeneratingVocabularyPlan = false }
+        vocabularyPlan = await DetailVocabularyPlanner.buildPreferred(item: item, localInsight: localInsight)
     }
 }
 
