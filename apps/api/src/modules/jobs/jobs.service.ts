@@ -2,15 +2,21 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { JobRun, JobRunDocument } from '../../database/schemas/job-run.schema';
+import { SyncState, SyncStateDocument } from '../../database/schemas/sync-state.schema';
 import { DigestService } from '../digest/digest.service';
 import { SyncService } from '../sync/sync.service';
 import { SyncSettingsService } from '../sync/sync-settings.service';
 
 @Injectable()
 export class JobsService {
+  private static readonly AUTO_DAILY_DIGEST_STATE_KEY = 'digest:auto_daily:last_trigger_at';
+  private static readonly AUTO_DAILY_DIGEST_COOLDOWN_MS = 30 * 60 * 1000;
+
   constructor(
     @InjectModel(JobRun.name)
     private readonly jobRunModel: Model<JobRunDocument>,
+    @InjectModel(SyncState.name)
+    private readonly syncStateModel: Model<SyncStateDocument>,
     private readonly syncService: SyncService,
     private readonly digestService: DigestService,
     private readonly syncSettingsService: SyncSettingsService
@@ -38,11 +44,13 @@ export class JobsService {
     return this.executeJob('sync', async () => {
       const result = await this.syncService.runIncrementalSync();
       await this.syncSettingsService.markSyncRun(new Date());
+      const autoDailyDigest = await this.maybeTriggerAutoDailyDigest(result);
 
       return {
         ...result,
         source,
-        forced: force
+        forced: force,
+        autoDailyDigest
       };
     });
   }
@@ -125,5 +133,103 @@ export class JobsService {
 
       throw error;
     }
+  }
+
+  private async maybeTriggerAutoDailyDigest(syncResult: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const totalInsertedRaw = Number(syncResult.totalInserted ?? 0);
+    const totalInserted = Number.isFinite(totalInsertedRaw) ? totalInsertedRaw : 0;
+
+    if (totalInserted <= 0) {
+      return {
+        triggered: false,
+        reason: 'no_new_items',
+        totalInserted
+      };
+    }
+
+    const now = new Date();
+    const cooldown = await this.getAutoDailyDigestCooldownState(now);
+    if (!cooldown.allowed) {
+      return {
+        triggered: false,
+        reason: 'cooldown',
+        totalInserted,
+        lastTriggeredAt: cooldown.lastTriggeredAt,
+        nextAllowedAt: cooldown.nextAllowedAt
+      };
+    }
+
+    try {
+      const digestResult = await this.triggerDailyDigest();
+      await this.syncStateModel.updateOne(
+        { key: JobsService.AUTO_DAILY_DIGEST_STATE_KEY },
+        {
+          $set: {
+            value: {
+              at: now.toISOString(),
+              source: 'sync',
+              totalInserted
+            }
+          }
+        },
+        { upsert: true }
+      );
+
+      return {
+        triggered: true,
+        totalInserted,
+        digestJob: digestResult
+      };
+    } catch (error) {
+      return {
+        triggered: true,
+        totalInserted,
+        digestJob: {
+          status: 'FAILED',
+          error: error instanceof Error ? error.message : String(error)
+        }
+      };
+    }
+  }
+
+  private async getAutoDailyDigestCooldownState(now: Date): Promise<{
+    allowed: boolean;
+    lastTriggeredAt: string | null;
+    nextAllowedAt: string | null;
+  }> {
+    const state = await this.syncStateModel.findOne({ key: JobsService.AUTO_DAILY_DIGEST_STATE_KEY }).lean();
+    const rawAt = state?.value?.at;
+    const lastTriggeredAt = typeof rawAt === 'string' ? rawAt : null;
+    if (!lastTriggeredAt) {
+      return {
+        allowed: true,
+        lastTriggeredAt: null,
+        nextAllowedAt: null
+      };
+    }
+
+    const lastMs = new Date(lastTriggeredAt).getTime();
+    if (!Number.isFinite(lastMs)) {
+      return {
+        allowed: true,
+        lastTriggeredAt: null,
+        nextAllowedAt: null
+      };
+    }
+
+    const nextAllowedAtMs = lastMs + JobsService.AUTO_DAILY_DIGEST_COOLDOWN_MS;
+    if (now.getTime() >= nextAllowedAtMs) {
+      return {
+        allowed: true,
+        lastTriggeredAt,
+        nextAllowedAt: new Date(nextAllowedAtMs).toISOString()
+      };
+    }
+
+    return {
+      allowed: false,
+      lastTriggeredAt,
+      nextAllowedAt: new Date(nextAllowedAtMs).toISOString()
+    };
   }
 }
