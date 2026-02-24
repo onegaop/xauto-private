@@ -27,8 +27,16 @@ Last Updated: 2026-02-24
   - Scheme/Test Plan: `XAutoApp` + `XAutoFull`
   - Status: Enabled
 
+- Workflow: `Main-iOS-Internal`
+  - ID: `c8203a40-3ebd-4a80-a6a5-6d9fa3fa5059`
+  - Trigger: branch push on `main` + file rule `apps/ios` (only iOS-related changes)
+  - Action: `ARCHIVE` (`buildDistributionAudience=INTERNAL_ONLY`)
+  - Scheme: `XAutoApp`
+  - Result: build is auto distributed to internal TestFlight audience
+  - Status: Enabled
+
 Notes:
-- Old workflow `XAuto Main Build` has been removed.
+- Old workflow `XAuto Main Build` has been removed and replaced by `Main-iOS-Internal`.
 - Temporary validation workflow has been removed.
 
 ### 2) GitHub Actions
@@ -59,4 +67,3 @@ Notes:
   - `Upgrade to GitHub Pro or make this repository public to enable this feature.`
 - Therefore `PR-Smoke` cannot be set as GitHub required check at this moment.
 - After upgrading repo plan, set `PR-Smoke` check as required on `main`.
-
