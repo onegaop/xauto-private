@@ -24,8 +24,14 @@ XAuto 是一个个人 X 书签外脑系统。
 ## 快速开始
 
 1. 安装 Node.js 20+ 与 npm 10+。
-2. 在 `secrets.local.json` 中填写本地密钥。
-3. 基于 `apps/api/.env.example` 与 `apps/admin/.env.example` 创建环境变量文件。
+2. 创建环境变量文件：
+
+```bash
+cp apps/api/.env.example apps/api/.env
+cp apps/admin/.env.example apps/admin/.env
+```
+
+3. 至少配置 API 的 `MONGODB_URI` 与 `ENCRYPTION_MASTER_KEY`。
 4. 安装依赖：
 
 ```bash
@@ -39,6 +45,8 @@ npm run dev:api
 npm run dev:admin
 ```
 
+6. 详细接手步骤见：`docs/public-onboarding.md`
+
 ## Git 规则
 
 - 不要在 `master` 上提交
@@ -48,6 +56,7 @@ npm run dev:admin
 
 ## 文档索引
 
+- 外部接手指南（推荐先读）：`docs/public-onboarding.md`
 - API 契约：`docs/api-contract.md`
 - GitHub 私有仓库配置：`docs/github-private-setup.md`
 - 运行手册：`docs/runbook.md`
