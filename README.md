@@ -2,6 +2,14 @@
 
 XAuto 是一个个人 X 书签外脑系统。
 
+## iOS 界面预览（iPhone 17 Pro 模拟器）
+
+<p>
+  <img src="docs/readme-assets/ios-17pro-today.png" alt="XAuto Today" width="260" />
+  <img src="docs/readme-assets/ios-17pro-week.png" alt="XAuto Week" width="260" />
+  <img src="docs/readme-assets/ios-17pro-settings.png" alt="XAuto Settings" width="260" />
+</p>
+
 ## Monorepo 结构
 
 - `apps/api`：NestJS + Fastify 后端服务
