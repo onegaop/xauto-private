@@ -446,7 +446,7 @@ struct TodayView: View {
                                                     Capsule().fill(Color.primary.opacity(0.06))
                                                     Capsule()
                                                         .fill(Color.orange.gradient)
-                                                        .frame(width: max(8, proxy.size.width * barRatio(for: row.count, total: max(1, stats.totalSummaries))))
+                                                        .frame(width: min(proxy.size.width, max(8, proxy.size.width * barRatio(for: row.count, total: max(1, stats.totalSummaries)))))
                                                 }
                                             }
                                             .frame(height: 6)
@@ -3508,7 +3508,8 @@ private func claimLabelTitle(_ raw: String) -> String {
 }
 
 private func barRatio(for count: Int, total: Int) -> CGFloat {
-    CGFloat(count) / CGFloat(max(1, total))
+    let ratio = CGFloat(count) / CGFloat(max(1, total))
+    return min(1, max(0, ratio))
 }
 
 private func relativeDate(_ isoString: String) -> String {
